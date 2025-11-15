@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PopFact Settings</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <div class="header">
+      <h1>PopFact</h1>
+      <p class="tagline">Real-time Fact Checker</p>
+    </div>
+
+    <div class="status-section">
+      <div class="status-item">
+        <span class="status-label">Status:</span>
+        <span class="status-value" id="status">Active</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Claims Checked:</span>
+        <span class="status-value" id="claims-count">0</span>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h2>Settings</h2>
+
+      <div class="setting-item">
+        <label>
+          <input type="checkbox" id="enable-text" checked>
+          <span>Check text content</span>
+        </label>
+      </div>
+
+      <div class="setting-item">
+        <label>
+          <input type="checkbox" id="enable-audio" checked>
+          <span>Check audio/voice content</span>
+        </label>
+      </div>
+
+      <div class="setting-item">
+        <label>
+          <input type="checkbox" id="enable-video" checked>
+          <span>Check video content</span>
+        </label>
+      </div>
+
+      <div class="setting-item">
+        <label>
+          <span>Ticker Speed:</span>
+          <select id="ticker-speed">
+            <option value="slow">Slow</option>
+            <option value="medium" selected>Medium</option>
+            <option value="fast">Fast</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="setting-item">
+        <label>
+          <span>Minimum Confidence:</span>
+          <input type="range" id="confidence-threshold" min="0" max="100" value="50">
+          <span id="confidence-value">50%</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="api-section">
+      <h2>API Configuration</h2>
+      <p class="api-note">Configure your fact-checking API credentials</p>
+
+      <div class="setting-item">
+        <label>
+          <span>API Provider:</span>
+          <select id="api-provider">
+            <option value="mock">Mock (Demo)</option>
+            <option value="openai">OpenAI</option>
+            <option value="claude">Anthropic Claude</option>
+            <option value="google">Google Fact Check</option>
+            <option value="custom">Custom API</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="setting-item">
+        <label>
+          <span>API Key:</span>
+          <input type="password" id="api-key" placeholder="Enter API key">
+        </label>
+      </div>
+
+      <button id="save-settings" class="btn-primary">Save Settings</button>
+    </div>
+
+    <div class="actions-section">
+      <button id="clear-cache" class="btn-secondary">Clear Cache</button>
+      <button id="view-stats" class="btn-secondary">View Statistics</button>
+    </div>
+
+    <div class="footer">
+      <p>Version 1.0.0</p>
+      <p><a href="#" id="help-link">Help & Documentation</a></p>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

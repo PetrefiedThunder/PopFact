@@ -1,0 +1,52 @@
+# Node modules
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Build outputs
+dist/
+build/
+*.zip
+
+# API keys and secrets
+.env
+.env.local
+config/secrets.json
+
+# OS files
+.DS_Store
+Thumbs.db
+.Spotlight-V100
+.Trashes
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test coverage
+coverage/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Logs
+*.log
+logs/
+
+# Extension packaging
+*.crx
+*.pem
+*.xpi
+
+# Generated icons (keep SVG source)
+# icons/*.png
+
+# Local development
+local/
