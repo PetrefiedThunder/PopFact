@@ -1,13 +1,10 @@
-// PopFact Content Script - Injects overlay and monitors page content
+// PopFact Content Script - CNN-Style Bottom Ticker with Mock Fact-Checking
 
 class PopFactOverlay {
   constructor() {
     this.overlay = null;
-    this.tickerScroll = null;
-    this.isVisible = true;
-    this.factCheckQueue = [];
-    this.processedClaims = new Set();
-    this.observer = null;
+    this.tickerInner = null;
+    this.factResults = [];
 
     this.init();
   }
@@ -16,14 +13,14 @@ class PopFactOverlay {
     // Create overlay UI
     this.createOverlay();
 
-    // Start monitoring page content
-    this.monitorPageContent();
-
     // Listen for fact-check results from background
     this.setupMessageListener();
 
-    // Check for audio/video elements
-    this.monitorMediaContent();
+    // Detect media elements (coming soon message)
+    this.detectMediaElements();
+
+    // Extract and queue initial claims
+    this.queueInitialFactChecks();
 
     console.log('PopFact: Overlay initialized');
   }
@@ -33,276 +30,131 @@ class PopFactOverlay {
     this.overlay = document.createElement('div');
     this.overlay.id = 'popfact-overlay';
 
-    // Create ticker structure
+    // Create exact CNN-style ticker structure
     this.overlay.innerHTML = `
-      <div class="popfact-ticker-container">
-        <div class="popfact-ticker-label">POPFACT</div>
-        <div class="popfact-ticker-content">
-          <div class="popfact-ticker-scroll" id="popfact-ticker-scroll">
-            <div class="popfact-loading">Scanning page for claims to verify...</div>
-          </div>
+      <div id="popfact-bar">
+        <div class="popfact-brand">PopFact</div>
+        <div class="popfact-ticker">
+          <div id="popfact-ticker-inner"></div>
         </div>
-        <div class="popfact-status">
-          <span class="popfact-status-dot"></span>
-          <span>ACTIVE</span>
-        </div>
+        <div class="popfact-status" id="popfact-status">LIVE FACT-CHECK DEMO</div>
       </div>
     `;
 
-    // Create toggle button
-    const toggleBtn = document.createElement('button');
-    toggleBtn.id = 'popfact-toggle';
-    toggleBtn.innerHTML = '▼';
-    toggleBtn.title = 'Toggle PopFact Overlay';
-    toggleBtn.addEventListener('click', () => this.toggleOverlay());
-
     // Add to page
     document.body.appendChild(this.overlay);
-    document.body.appendChild(toggleBtn);
 
-    this.tickerScroll = document.getElementById('popfact-ticker-scroll');
+    this.tickerInner = document.getElementById('popfact-ticker-inner');
   }
 
-  toggleOverlay() {
-    this.isVisible = !this.isVisible;
-    const toggleBtn = document.getElementById('popfact-toggle');
+  // TASK 3: Simple claim extraction from page
+  extractClaimsFromPage() {
+    const claims = [];
 
-    if (this.isVisible) {
-      this.overlay.classList.remove('hidden');
-      toggleBtn.classList.remove('overlay-hidden');
-      toggleBtn.innerHTML = '▼';
-    } else {
-      this.overlay.classList.add('hidden');
-      toggleBtn.classList.add('overlay-hidden');
-      toggleBtn.innerHTML = '▲';
-    }
-  }
+    // Collect text from main content elements
+    const elements = document.querySelectorAll('p, h1, h2, h3');
+    let allText = '';
 
-  monitorPageContent() {
-    // Extract initial text content
-    this.extractTextClaims();
-
-    // Watch for dynamic content changes
-    this.observer = new MutationObserver((mutations) => {
-      this.extractTextClaims();
+    elements.forEach(el => {
+      // Skip popfact elements
+      if (el.id && el.id.startsWith('popfact-')) return;
+      allText += ' ' + el.textContent;
     });
 
-    this.observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      characterData: true
-    });
-  }
+    // Split into sentences on [.?!]
+    const sentences = allText.split(/[.!?]+/);
 
-  extractTextClaims() {
-    // Extract declarative statements from page text
-    const textNodes = this.getTextNodes(document.body);
-    const sentences = this.extractSentences(textNodes);
-    const declarativeSentences = this.filterDeclarativeSentences(sentences);
+    // Filter to sentences > 40 chars and > 6 words
+    for (const sentence of sentences) {
+      const trimmed = sentence.trim();
+      const wordCount = trimmed.split(/\s+/).length;
 
-    // Send to background for fact-checking
-    declarativeSentences.forEach(claim => {
-      if (!this.processedClaims.has(claim) && claim.length > 20) {
-        this.processedClaims.add(claim);
-        this.sendForFactCheck(claim, 'text');
+      if (trimmed.length > 40 && wordCount > 6) {
+        claims.push(trimmed);
       }
+
+      // Return at most 5 claims for demo
+      if (claims.length >= 5) break;
+    }
+
+    return claims;
+  }
+
+  // TASK 3: Queue initial fact-checks
+  queueInitialFactChecks() {
+    const claims = this.extractClaimsFromPage();
+
+    console.log(`PopFact: Extracted ${claims.length} claims for fact-checking`);
+
+    claims.forEach(claim => {
+      chrome.runtime.sendMessage({
+        type: 'FACT_CHECK_REQUEST',
+        claimText: claim
+      });
     });
   }
 
-  getTextNodes(element) {
-    const textNodes = [];
-    const walker = document.createTreeWalker(
-      element,
-      NodeFilter.SHOW_TEXT,
-      {
-        acceptNode: (node) => {
-          // Skip script, style, and popfact elements
-          const parent = node.parentElement;
-          if (!parent) return NodeFilter.FILTER_REJECT;
+  // TASK 4: Detect media elements (coming soon)
+  detectMediaElements() {
+    const hasVideo = document.querySelector('video') !== null;
+    const hasAudio = document.querySelector('audio') !== null;
 
-          const tagName = parent.tagName.toLowerCase();
-          if (['script', 'style', 'noscript'].includes(tagName)) {
-            return NodeFilter.FILTER_REJECT;
-          }
-          if (parent.id && parent.id.startsWith('popfact-')) {
-            return NodeFilter.FILTER_REJECT;
-          }
-
-          const text = node.textContent.trim();
-          if (text.length > 10) {
-            return NodeFilter.FILTER_ACCEPT;
-          }
-          return NodeFilter.FILTER_REJECT;
+    if (hasVideo || hasAudio) {
+      // Send a "coming soon" message to display in ticker
+      chrome.runtime.sendMessage({
+        type: 'FACT_CHECK_RESULT',
+        data: {
+          claim: 'Detected media: audio/video analysis and live captions are in development for this demo.',
+          verdict: 'UNVERIFIED',
+          confidence: 0,
+          explanation: 'Roadmap feature.',
+          sources: []
         }
-      }
-    );
-
-    let node;
-    while (node = walker.nextNode()) {
-      textNodes.push(node.textContent.trim());
+      });
     }
-
-    return textNodes;
   }
 
-  extractSentences(textNodes) {
-    const sentences = [];
-    const text = textNodes.join(' ');
-
-    // Basic sentence splitting (can be enhanced with NLP)
-    const splitSentences = text.match(/[^.!?]+[.!?]+/g) || [];
-
-    splitSentences.forEach(sentence => {
-      const cleaned = sentence.trim();
-      if (cleaned.length > 20) {
-        sentences.push(cleaned);
-      }
-    });
-
-    return sentences;
-  }
-
-  filterDeclarativeSentences(sentences) {
-    // Filter for declarative statements (can be enhanced with NLP)
-    return sentences.filter(sentence => {
-      // Basic heuristics for declarative statements
-      const lower = sentence.toLowerCase();
-
-      // Exclude questions
-      if (sentence.includes('?')) return false;
-
-      // Exclude commands (imperative)
-      const imperativeWords = ['click', 'subscribe', 'buy', 'download', 'register'];
-      if (imperativeWords.some(word => lower.startsWith(word))) return false;
-
-      // Look for factual indicators
-      const factualIndicators = [
-        'is', 'are', 'was', 'were', 'has', 'have', 'had',
-        'will', 'can', 'could', 'would', 'should',
-        'according to', 'study shows', 'research indicates',
-        'percent', '%', 'million', 'billion'
-      ];
-
-      return factualIndicators.some(indicator => lower.includes(indicator));
-    });
-  }
-
-  monitorMediaContent() {
-    // Monitor video and audio elements
-    const mediaElements = document.querySelectorAll('video, audio');
-
-    mediaElements.forEach(media => {
-      // Check if element already has listener
-      if (!media.dataset.popfactMonitored) {
-        media.dataset.popfactMonitored = 'true';
-
-        // Extract audio for transcription when media plays
-        media.addEventListener('play', () => {
-          this.handleMediaPlayback(media);
-        });
-      }
-    });
-
-    // Watch for new media elements
-    const mediaObserver = new MutationObserver(() => {
-      this.monitorMediaContent();
-    });
-
-    mediaObserver.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  }
-
-  handleMediaPlayback(mediaElement) {
-    console.log('PopFact: Media playback detected', mediaElement.tagName);
-
-    // Note: Audio transcription requires Web Speech API or external service
-    // This is a placeholder for the implementation
-    chrome.runtime.sendMessage({
-      type: 'MEDIA_DETECTED',
-      mediaType: mediaElement.tagName.toLowerCase(),
-      src: mediaElement.src || mediaElement.currentSrc
-    });
-  }
-
-  sendForFactCheck(claim, source) {
-    chrome.runtime.sendMessage({
-      type: 'FACT_CHECK_REQUEST',
-      claim: claim,
-      source: source,
-      url: window.location.href,
-      timestamp: Date.now()
-    });
-  }
-
+  // TASK 3: Message listener for fact-check results
   setupMessageListener() {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.type === 'FACT_CHECK_RESULT') {
-        this.displayFactCheck(message.data);
+        this.factResults.push(message.data);
+        this.updateTicker();
       }
     });
   }
 
-  displayFactCheck(result) {
-    const { claim, verdict, explanation, confidence } = result;
+  // TASK 3: Update ticker with fact-check results
+  updateTicker() {
+    // Clear existing ticker content
+    this.tickerInner.innerHTML = '';
 
-    // Determine verdict category
-    let category = 'unverified';
-    if (verdict === 'TRUE' || confidence > 0.8) {
-      category = 'true';
-    } else if (verdict === 'FALSE' || confidence < 0.3) {
-      category = 'false';
-    } else if (verdict === 'MIXED') {
-      category = 'mixed';
-    }
+    // Create items for each fact result
+    this.factResults.forEach(result => {
+      const { claim, verdict, explanation } = result;
 
-    // Create fact check item
-    const factItem = document.createElement('div');
-    factItem.className = `popfact-item ${category}`;
-    factItem.innerHTML = `
-      <span class="popfact-item-icon">${this.getVerdictIcon(category)}</span>
-      <span class="popfact-item-text">
-        <span class="popfact-claim">${this.truncate(claim, 80)}</span>
-        <span class="popfact-verdict">${explanation || verdict}</span>
-      </span>
-      <span class="popfact-separator"></span>
-    `;
+      // Determine CSS class based on verdict
+      let verdictClass = 'popfact-unverified';
+      if (verdict === 'TRUE') verdictClass = 'popfact-true';
+      else if (verdict === 'FALSE') verdictClass = 'popfact-false';
+      else if (verdict === 'MIXED') verdictClass = 'popfact-mixed';
 
-    // Add to ticker
-    this.addToTicker(factItem);
-  }
+      // Truncate claim to max 120 chars
+      const truncatedClaim = claim.length > 120
+        ? claim.substring(0, 117) + '…'
+        : claim;
 
-  getVerdictIcon(category) {
-    const icons = {
-      'true': '✓',
-      'false': '✗',
-      'mixed': '!',
-      'unverified': '?'
-    };
-    return icons[category] || '?';
-  }
+      // Create ticker item
+      const item = document.createElement('span');
+      item.className = `popfact-item ${verdictClass}`;
+      item.textContent = `${truncatedClaim} — ${explanation || verdict}`;
 
-  truncate(text, maxLength) {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength - 3) + '...';
-  }
+      this.tickerInner.appendChild(item);
+    });
 
-  addToTicker(factItem) {
-    // Remove loading message if present
-    const loading = this.tickerScroll.querySelector('.popfact-loading');
-    if (loading) {
-      loading.remove();
-    }
-
-    // Add new fact item
-    this.tickerScroll.appendChild(factItem);
-
-    // Clone items for seamless scrolling
-    if (this.tickerScroll.children.length < 5) {
-      const clone = factItem.cloneNode(true);
-      this.tickerScroll.appendChild(clone);
-    }
+    // Duplicate items for seamless loop scrolling
+    const clone = this.tickerInner.cloneNode(true);
+    this.tickerInner.appendChild(clone);
   }
 }
 
