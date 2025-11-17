@@ -1,0 +1,21 @@
+{
+  "name": "popfact",
+  "version": "1.0.0",
+  "description": "PopFact is a browser extension that provides real-time fact-checking for web content, including text, audio, and video. Inspired by Pop-Up Video and news network tickers, it displays verified information in a continuous scroll at the bottom of your browser.",
+  "main": "background.js",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:report": "playwright show-report"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  }
+}
