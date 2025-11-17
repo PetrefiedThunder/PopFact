@@ -3,9 +3,16 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Playwright configuration for PopFact browser extension testing
  * @see https://playwright.dev/docs/test-configuration
+ * 
+ * Note: Extension-specific tests require manual extension loading.
+ * Run smoke tests with: npm test
+ * Run all tests with extension loaded manually: npm run test:extension
  */
 export default defineConfig({
   testDir: './tests',
+  
+  /* Test match pattern - by default only run smoke tests */
+  testMatch: process.env.RUN_EXTENSION_TESTS ? '**/*.spec.ts' : '**/smoke.spec.ts',
   
   /* Run tests in files in parallel */
   fullyParallel: true,
@@ -27,9 +34,6 @@ export default defineConfig({
   
   /* Shared settings for all the projects below */
   use: {
-    /* Base URL to use in actions like `await page.goto('/')` */
-    // baseURL: 'http://127.0.0.1:3000',
-    
     /* Collect trace when retrying the failed test */
     trace: 'on-first-retry',
     
@@ -46,17 +50,6 @@ export default defineConfig({
       name: 'chromium',
       use: { 
         ...devices['Desktop Chrome'],
-        // Extension testing requires a persistent context
-        launchOptions: {
-          args: [
-            // Load the extension from the current directory
-            `--disable-extensions-except=${process.cwd()}`,
-            `--load-extension=${process.cwd()}`,
-            // Performance flags
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-          ],
-        },
       },
     },
   ],
