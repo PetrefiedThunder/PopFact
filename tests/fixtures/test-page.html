@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PopFact Test Page - Sample News Article</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+      color: #333;
+    }
+    
+    header {
+      border-bottom: 3px solid #ff6b35;
+      padding-bottom: 20px;
+      margin-bottom: 30px;
+    }
+    
+    h1 {
+      color: #ff6b35;
+      margin-bottom: 10px;
+    }
+    
+    .meta {
+      color: #666;
+      font-size: 14px;
+    }
+    
+    article {
+      margin-bottom: 100px; /* Space for PopFact overlay */
+    }
+    
+    p {
+      margin-bottom: 20px;
+    }
+    
+    .claim {
+      background-color: #fffbea;
+      padding: 15px;
+      border-left: 4px solid #ffc107;
+      margin: 20px 0;
+    }
+    
+    .claim::before {
+      content: "💡 ";
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Sample News Article for Testing</h1>
+    <div class="meta">Published: November 17, 2025 | Source: Test Fixture</div>
+  </header>
+  
+  <article>
+    <h2>Breaking: Study Claims About Various Topics</h2>
+    
+    <p>
+      In a recent development, scientists have made several interesting discoveries. 
+      According to researchers, the sky is blue due to Rayleigh scattering. This phenomenon 
+      has been well-documented in scientific literature for decades.
+    </p>
+    
+    <div class="claim">
+      The Earth is round and orbits around the Sun. This has been confirmed by multiple 
+      space missions and astronomical observations over centuries.
+    </div>
+    
+    <p>
+      However, some controversial claims have also emerged. One study suggests that 
+      coffee is healthy and can improve cognitive function. Research indicates that 
+      moderate coffee consumption has several health benefits.
+    </p>
+    
+    <p>
+      In other news, water is wet and has a molecular formula of H2O. This basic 
+      scientific fact is taught in schools worldwide. The human body is approximately 
+      60 percent water, according to medical sources.
+    </p>
+    
+    <div class="claim">
+      A recent viral post claimed that the moon landing was fake. This conspiracy theory 
+      has been thoroughly debunked by numerous scientific organizations and experts.
+    </div>
+    
+    <p>
+      Climate scientists report that global temperatures have been rising over the past 
+      century. The data shows a clear trend of warming, with significant impacts on 
+      weather patterns around the world.
+    </p>
+    
+    <p>
+      In technology news, experts say that artificial intelligence will continue to 
+      advance rapidly. Machine learning models are becoming more sophisticated each year. 
+      The field has seen tremendous growth in recent years.
+    </p>
+    
+    <div class="claim">
+      Some sources incorrectly state that vaccines cause autism. This claim has been 
+      completely discredited by extensive scientific research and medical studies.
+    </div>
+    
+    <p>
+      Finally, nutritionists emphasize the importance of a balanced diet. They recommend 
+      eating a variety of fruits, vegetables, and whole grains. Regular exercise is also 
+      crucial for maintaining good health.
+    </p>
+    
+    <h3>Test Cases for PopFact</h3>
+    
+    <ul>
+      <li>TRUE claim: "The sky is blue"</li>
+      <li>TRUE claim: "The Earth is round"</li>
+      <li>FALSE claim: "The moon landing was fake"</li>
+      <li>FALSE claim: "Vaccines cause autism"</li>
+      <li>MIXED claim: "Coffee is healthy"</li>
+      <li>UNVERIFIED claims: Various statements about technology and trends</li>
+    </ul>
+    
+    <p id="dynamic-content-trigger">
+      This section will be used to test dynamic content detection...
+    </p>
+  </article>
+  
+  <script>
+    // Add dynamic content after page load to test MutationObserver
+    setTimeout(() => {
+      const trigger = document.getElementById('dynamic-content-trigger');
+      if (trigger) {
+        const newPara = document.createElement('p');
+        newPara.textContent = 'Dynamic content: The Earth is flat. This is a false claim that should be detected.';
+        trigger.after(newPara);
+      }
+    }, 2000);
+  </script>
+</body>
+</html>
