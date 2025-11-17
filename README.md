@@ -156,11 +156,44 @@ PopFact/
 
 ### Prerequisites
 
-- Node.js (for development tools)
+- Node.js 18+ (for development tools)
 - Chrome or Firefox browser
 - API key for fact-checking service
 
 ### Testing
+
+PopFact includes a comprehensive QA test suite built with Playwright.
+
+**Quick Start:**
+```bash
+# Install dependencies
+npm install
+
+# Install Playwright browsers
+npx playwright install chromium
+
+# Run all tests
+npm test
+
+# Run tests with UI
+npm run test:ui
+```
+
+**Test Categories:**
+- **Basic Overlay Tests** - Core functionality (9 tests)
+- **Fact-Checking Tests** - Mocked AI responses (9 tests)
+- **Performance Tests** - < 200ms load time (8 tests)
+- **Anti-Fragility Tests** - Edge cases and resilience (11 tests)
+
+**Key Features:**
+- 🚫 No live API calls (all responses mocked)
+- ⚡ Performance guardrails (< 200ms overlay load)
+- 🎯 Resilient selectors (works with HTML changes)
+- 📊 36 comprehensive tests
+
+For detailed testing documentation, see [TESTING.md](TESTING.md) and [tests/README.md](tests/README.md).
+
+### Manual Testing
 
 1. Load the extension in developer mode
 2. Visit any news website or article
