@@ -68,4 +68,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// Show disclaimer on first install
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === 'install') {
+    chrome.tabs.create({
+      url: chrome.runtime.getURL('disclaimer.html')
+    });
+  }
+});
+
 console.log('PopFact Background Service: Initialized (Mock Mode)');
