@@ -7,23 +7,39 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function loadSettings() {
+  // Load non-sensitive settings from sync storage
   chrome.storage.sync.get({
     enableText: true,
     enableAudio: true,
     enableVideo: true,
     tickerSpeed: 'medium',
     confidenceThreshold: 50,
-    apiProvider: 'mock',
-    apiKey: ''
+    apiProvider: 'mock'
   }, (settings) => {
-    document.getElementById('enable-text').checked = settings.enableText;
-    document.getElementById('enable-audio').checked = settings.enableAudio;
-    document.getElementById('enable-video').checked = settings.enableVideo;
-    document.getElementById('ticker-speed').value = settings.tickerSpeed;
-    document.getElementById('confidence-threshold').value = settings.confidenceThreshold;
-    document.getElementById('confidence-value').textContent = settings.confidenceThreshold + '%';
-    document.getElementById('api-provider').value = settings.apiProvider;
-    document.getElementById('api-key').value = settings.apiKey;
+    // Validate and sanitize settings
+    const validatedSettings = {
+      enableText: Boolean(settings.enableText),
+      enableAudio: Boolean(settings.enableAudio),
+      enableVideo: Boolean(settings.enableVideo),
+      tickerSpeed: ['slow', 'medium', 'fast'].includes(settings.tickerSpeed) ? settings.tickerSpeed : 'medium',
+      confidenceThreshold: Math.max(0, Math.min(100, parseInt(settings.confidenceThreshold) || 50)),
+      apiProvider: ['mock', 'openai', 'claude', 'google', 'custom'].includes(settings.apiProvider) ? settings.apiProvider : 'mock'
+    };
+
+    document.getElementById('enable-text').checked = validatedSettings.enableText;
+    document.getElementById('enable-audio').checked = validatedSettings.enableAudio;
+    document.getElementById('enable-video').checked = validatedSettings.enableVideo;
+    document.getElementById('ticker-speed').value = validatedSettings.tickerSpeed;
+    document.getElementById('confidence-threshold').value = validatedSettings.confidenceThreshold;
+    document.getElementById('confidence-value').textContent = validatedSettings.confidenceThreshold + '%';
+    document.getElementById('api-provider').value = validatedSettings.apiProvider;
+  });
+
+  // Load sensitive API key from local storage (not synced)
+  chrome.storage.local.get({
+    apiKey: ''
+  }, (data) => {
+    document.getElementById('api-key').value = data.apiKey || '';
   });
 }
 
@@ -50,17 +66,24 @@ function setupEventListeners() {
 }
 
 function saveSettings() {
-  const settings = {
+  // Non-sensitive settings for sync storage
+  const syncSettings = {
     enableText: document.getElementById('enable-text').checked,
     enableAudio: document.getElementById('enable-audio').checked,
     enableVideo: document.getElementById('enable-video').checked,
     tickerSpeed: document.getElementById('ticker-speed').value,
     confidenceThreshold: parseInt(document.getElementById('confidence-threshold').value),
-    apiProvider: document.getElementById('api-provider').value,
+    apiProvider: document.getElementById('api-provider').value
+  };
+
+  // Sensitive API key for local storage only (not synced)
+  const localSettings = {
     apiKey: document.getElementById('api-key').value
   };
 
-  chrome.storage.sync.set(settings, () => {
+  // Save both
+  chrome.storage.sync.set(syncSettings);
+  chrome.storage.local.set(localSettings, () => {
     // Show success feedback
     const btn = document.getElementById('save-settings');
     const originalText = btn.textContent;
