@@ -5,6 +5,7 @@ class PopFactOverlay {
     this.overlay = null;
     this.tickerScroll = null;
     this.isVisible = true;
+    this.tickerPaused = false;
     this.factCheckQueue = [];
     this.processedClaims = new Set();
     this.maxProcessedClaims = 1000; // Prevent unbounded memory growth
@@ -53,7 +54,8 @@ class PopFactOverlay {
         </div>
         <div class="popfact-status">
           <span class="popfact-status-dot"></span>
-          <span>ACTIVE</span>
+          <span class="popfact-status-text" id="popfact-status-text">ACTIVE</span>
+          <button id="popfact-flow-toggle" class="popfact-flow-toggle" aria-pressed="false" title="Start or stop the ticker">★ Stop</button>
         </div>
       </div>
     `;
@@ -65,11 +67,43 @@ class PopFactOverlay {
     toggleBtn.title = 'Toggle PopFact Overlay';
     toggleBtn.addEventListener('click', () => this.toggleOverlay());
 
+    // Bind ticker control
+    const flowToggleBtn = this.overlay.querySelector('#popfact-flow-toggle');
+    if (flowToggleBtn) {
+      flowToggleBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        this.toggleTickerFlow();
+      });
+    }
+
     // Add to page
     document.body.appendChild(this.overlay);
     document.body.appendChild(toggleBtn);
 
     this.tickerScroll = document.getElementById('popfact-ticker-scroll');
+  }
+
+  toggleTickerFlow() {
+    if (!this.tickerScroll) return;
+
+    this.tickerPaused = !this.tickerPaused;
+    this.tickerScroll.classList.toggle('paused', this.tickerPaused);
+
+    const toggleBtn = document.getElementById('popfact-flow-toggle');
+    if (toggleBtn) {
+      toggleBtn.textContent = this.tickerPaused ? '▶ Start' : '★ Stop';
+      toggleBtn.setAttribute('aria-pressed', this.tickerPaused ? 'true' : 'false');
+    }
+
+    const statusText = document.getElementById('popfact-status-text');
+    if (statusText) {
+      statusText.textContent = this.tickerPaused ? 'PAUSED' : 'ACTIVE';
+    }
+
+    const statusDot = this.overlay?.querySelector('.popfact-status-dot');
+    if (statusDot) {
+      statusDot.classList.toggle('paused', this.tickerPaused);
+    }
   }
 
   toggleOverlay() {

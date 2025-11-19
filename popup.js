@@ -14,7 +14,7 @@ function loadSettings() {
     enableVideo: true,
     tickerSpeed: 'medium',
     confidenceThreshold: 50,
-    apiProvider: 'mock'
+    apiProvider: 'open-knowledge'
   }, (settings) => {
     // Validate and sanitize settings
     const validatedSettings = {
@@ -23,7 +23,7 @@ function loadSettings() {
       enableVideo: Boolean(settings.enableVideo),
       tickerSpeed: ['slow', 'medium', 'fast'].includes(settings.tickerSpeed) ? settings.tickerSpeed : 'medium',
       confidenceThreshold: Math.max(0, Math.min(100, parseInt(settings.confidenceThreshold) || 50)),
-      apiProvider: ['mock', 'openai', 'claude', 'google', 'custom'].includes(settings.apiProvider) ? settings.apiProvider : 'mock'
+      apiProvider: ['open-knowledge', 'mock', 'openai', 'claude', 'google', 'custom'].includes(settings.apiProvider) ? settings.apiProvider : 'open-knowledge'
     };
 
     document.getElementById('enable-text').checked = validatedSettings.enableText;
@@ -52,6 +52,9 @@ function setupEventListeners() {
 
   // View stats button
   document.getElementById('view-stats').addEventListener('click', viewStats);
+
+  // Send wrap-up email button
+  document.getElementById('send-wrapup').addEventListener('click', sendWrapUpEmail);
 
   // Confidence threshold slider
   document.getElementById('confidence-threshold').addEventListener('input', (e) => {
@@ -82,7 +85,7 @@ function saveSettings() {
     enableVideo: Boolean(enableVideo),
     tickerSpeed: ['slow', 'medium', 'fast'].includes(tickerSpeed) ? tickerSpeed : 'medium',
     confidenceThreshold: Math.max(0, Math.min(100, confidenceThreshold || 50)),
-    apiProvider: ['mock', 'openai', 'claude', 'google', 'custom'].includes(apiProvider) ? apiProvider : 'mock'
+    apiProvider: ['open-knowledge', 'mock', 'openai', 'claude', 'google', 'custom'].includes(apiProvider) ? apiProvider : 'open-knowledge'
   };
 
   // Validate API key (max length)
@@ -127,6 +130,43 @@ Last Updated: ${data.lastUpdated ? new Date(data.lastUpdated).toLocaleString() :
     `.trim();
 
     alert(stats);
+  });
+}
+
+function sendWrapUpEmail() {
+  chrome.storage.local.get({ factCheckLog: [] }, (data) => {
+    const log = Array.isArray(data.factCheckLog) ? data.factCheckLog.slice(0, 25) : [];
+
+    if (!log.length) {
+      alert('No fact checks recorded yet. Browse a page to generate some results first.');
+      return;
+    }
+
+    const header = ['Timestamp', 'Claim', 'Verdict', 'Provider', 'Source Type', 'Page URL', 'Sources'].join(',');
+    const rows = log.map((entry) => {
+      const timestamp = entry.timestamp ? new Date(entry.timestamp).toISOString() : '';
+      const claim = (entry.claim || '').replace(/"/g, '""');
+      const sources = (entry.sources || []).join(' | ');
+
+      return [
+        timestamp,
+        `"${claim}"`,
+        entry.verdict || 'UNVERIFIED',
+        entry.provider || 'open-knowledge',
+        entry.sourceType || 'text',
+        entry.url || 'unknown',
+        `"${sources}"`
+      ].join(',');
+    });
+
+    const bodyLines = [
+      'PopFact wrap-up of recently fact-checked content:',
+      header,
+      ...rows
+    ];
+
+    const mailtoLink = `mailto:?subject=${encodeURIComponent('PopFact fact-check wrap-up')}&body=${encodeURIComponent(bodyLines.join('\n'))}`;
+    window.location.href = mailtoLink;
   });
 }
 
