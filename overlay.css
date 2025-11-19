@@ -6,13 +6,14 @@
   left: 0;
   right: 0;
   height: 80px;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.85));
-  border-top: 3px solid #ff6b35;
+  background: linear-gradient(to top, rgba(8, 12, 22, 0.72), rgba(8, 12, 22, 0.55));
+  border-top: 3px solid rgba(255, 107, 53, 0.65);
   z-index: 2147483647;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   overflow: hidden;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
   transition: transform 0.3s ease-in-out;
+  backdrop-filter: blur(10px);
 }
 
 #popfact-overlay.hidden {
@@ -33,7 +34,7 @@
   top: 0;
   bottom: 0;
   width: 120px;
-  background: #ff6b35;
+  background: rgba(255, 107, 53, 0.8);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -59,6 +60,11 @@
   height: 100%;
   animation: scroll-left 30s linear infinite;
   white-space: nowrap;
+}
+
+.popfact-ticker-scroll.paused {
+  animation-play-state: paused;
+  opacity: 0.9;
 }
 
 @keyframes scroll-left {
@@ -189,6 +195,31 @@
   border-radius: 50%;
   background: #28a745;
   animation: pulse 2s ease-in-out infinite;
+}
+
+.popfact-status-dot.paused {
+  background: #ffc107;
+  animation-play-state: paused;
+}
+
+.popfact-status-text {
+  letter-spacing: 0.5px;
+}
+
+.popfact-flow-toggle {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.popfact-flow-toggle:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
 }
 
 @keyframes pulse {

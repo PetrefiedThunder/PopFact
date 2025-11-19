@@ -1,6 +1,7 @@
 // PopFact Background Service Worker
 // Handles fact-checking requests and API integration
 
+
 class FactCheckService {
   constructor() {
     this.apiEndpoint = 'https://api.example.com/factcheck'; // Replace with actual fact-checking API
@@ -15,9 +16,55 @@ class FactCheckService {
     this.rateLimitRefillRate = 1; // 1 token per second (60 req/min)
     this.lastRefill = Date.now();
 
+    this.settings = {
+      apiProvider: 'open-knowledge',
+      apiKey: '',
+      confidenceThreshold: 50
+    };
+
+    this.providers = {
+      'open-knowledge': new OpenKnowledgeProvider(),
+      'mock': new MockProvider()
+    };
+
     this.setupMessageListener();
     this.setupRateLimitRefill();
+    this.loadSettings();
     console.log('PopFact Background Service: Initialized');
+  }
+
+  loadSettings() {
+    chrome.storage.sync.get({
+      apiProvider: 'open-knowledge',
+      confidenceThreshold: 50
+    }, (data) => {
+      if (data && typeof data === 'object') {
+        this.settings.apiProvider = data.apiProvider || 'open-knowledge';
+        this.settings.confidenceThreshold = Number.isFinite(data.confidenceThreshold)
+          ? data.confidenceThreshold
+          : 50;
+      }
+    });
+
+    chrome.storage.local.get({ apiKey: '' }, (data) => {
+      if (data && typeof data.apiKey === 'string') {
+        this.settings.apiKey = data.apiKey;
+      }
+    });
+
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName === 'sync') {
+        if (changes.apiProvider) {
+          this.settings.apiProvider = changes.apiProvider.newValue || 'open-knowledge';
+        }
+        if (changes.confidenceThreshold) {
+          this.settings.confidenceThreshold = changes.confidenceThreshold.newValue;
+        }
+      }
+      if (areaName === 'local' && changes.apiKey) {
+        this.settings.apiKey = changes.apiKey.newValue;
+      }
+    });
   }
 
   setupRateLimitRefill() {
@@ -96,7 +143,16 @@ class FactCheckService {
     const cacheKey = this.getCacheKey(claim);
     if (this.cache.has(cacheKey)) {
       const cachedResult = this.cache.get(cacheKey);
-      this.sendResultToTab(tabId, cachedResult);
+      const enrichedResult = {
+        ...cachedResult,
+        claim,
+        sourceType: source,
+        url,
+        provider: this.settings.apiProvider,
+        timestamp: Date.now()
+      };
+      this.recordFactCheck(enrichedResult);
+      this.sendResultToTab(tabId, enrichedResult);
       return;
     }
 
@@ -137,7 +193,10 @@ class FactCheckService {
     const request = this.queue.shift();
 
     try {
-      const result = await this.performFactCheck(request.claim);
+      const result = await this.performFactCheck(request.claim, {
+        source: request.source,
+        url: request.url
+      });
 
       // Cache result with LRU eviction
       const cacheKey = this.getCacheKey(request.claim);
@@ -146,10 +205,21 @@ class FactCheckService {
         const firstKey = this.cache.keys().next().value;
         this.cache.delete(firstKey);
       }
-      this.cache.set(cacheKey, result);
+      this.cache.set(cacheKey, enrichedResult);
 
-      // Send to tab
-      this.sendResultToTab(request.tabId, result);
+      // Enrich result with request metadata and active provider
+      const enrichedResult = {
+        ...result,
+        claim: request.claim,
+        sourceType: request.source,
+        url: request.url,
+        provider: this.settings.apiProvider,
+        timestamp: Date.now()
+      };
+
+      // Persist log and send to tab
+      this.recordFactCheck(enrichedResult);
+      this.sendResultToTab(request.tabId, enrichedResult);
 
       // Continue processing with delay to avoid rate limiting
       setTimeout(() => this.processQueue(), 1000);
@@ -168,99 +238,37 @@ class FactCheckService {
     }
   }
 
-  async performFactCheck(claim) {
-    // This is a placeholder implementation
-    // In production, this should call a real fact-checking API
-
-    // Option 1: Use a fact-checking API service
-    // Examples: Google Fact Check Tools API, ClaimBuster API, etc.
-
-    // Option 2: Use an LLM API (OpenAI, Anthropic Claude, etc.)
-    // This example shows a mock implementation
+  async performFactCheck(claim, context = {}) {
+    const providerKey = this.settings.apiProvider || 'open-knowledge';
+    const provider = this.providers[providerKey] || this.providers['open-knowledge'];
 
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const result = await provider.check(claim, {
+        apiKey: this.settings.apiKey,
+        confidenceThreshold: this.settings.confidenceThreshold,
+        source: context.source,
+        url: context.url
+      });
 
-      // Mock fact-checking logic
-      const result = await this.mockFactCheck(claim);
-
-      return result;
+      return {
+        claim,
+        verdict: result.verdict,
+        explanation: result.explanation,
+        confidence: result.confidence,
+        sources: result.sources || [],
+        timestamp: Date.now()
+      };
     } catch (error) {
-      throw new Error(`Fact check failed: ${error.message}`);
+      console.error('PopFact: Provider failure', error);
+      return {
+        claim,
+        verdict: 'ERROR',
+        explanation: 'Unable to verify claim at this time',
+        confidence: 0,
+        sources: [],
+        timestamp: Date.now()
+      };
     }
-  }
-
-  async mockFactCheck(claim) {
-    // Mock implementation for demonstration
-    // Replace with actual API integration
-
-    const lowerClaim = claim.toLowerCase();
-
-    // Simple pattern matching for demo purposes
-    const patterns = {
-      'true': ['sky is blue', 'earth is round', 'water is wet'],
-      'false': ['earth is flat', 'vaccines cause autism', 'moon landing was fake'],
-      'mixed': ['coffee is healthy', 'carbs are bad']
-    };
-
-    let verdict = 'UNVERIFIED';
-    let confidence = 0.5;
-
-    for (const [category, keywords] of Object.entries(patterns)) {
-      for (const keyword of keywords) {
-        if (lowerClaim.includes(keyword)) {
-          verdict = category.toUpperCase();
-          confidence = category === 'true' ? 0.9 : category === 'false' ? 0.1 : 0.5;
-          break;
-        }
-      }
-    }
-
-    // Use external API in production
-    // Example with OpenAI:
-    /*
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer YOUR_API_KEY'
-      },
-      body: JSON.stringify({
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a fact-checking assistant. Analyze the claim and respond with TRUE, FALSE, MIXED, or UNVERIFIED along with a brief explanation.'
-          },
-          {
-            role: 'user',
-            content: `Fact-check this claim: "${claim}"`
-          }
-        ]
-      })
-    });
-    */
-
-    return {
-      claim: claim,
-      verdict: verdict,
-      explanation: this.generateExplanation(claim, verdict),
-      confidence: confidence,
-      sources: [],
-      timestamp: Date.now()
-    };
-  }
-
-  generateExplanation(claim, verdict) {
-    const explanations = {
-      'TRUE': 'This claim is supported by reliable sources',
-      'FALSE': 'This claim contradicts established facts',
-      'MIXED': 'This claim contains both accurate and inaccurate elements',
-      'UNVERIFIED': 'Insufficient evidence to verify this claim'
-    };
-
-    return explanations[verdict] || 'Verification pending';
   }
 
   handleMediaDetection(message, tabId) {
@@ -283,6 +291,31 @@ class FactCheckService {
     return claim.toLowerCase().trim().replace(/\s+/g, ' ');
   }
 
+  recordFactCheck(result) {
+    chrome.storage.local.get({ factCheckLog: [], claimsChecked: 0 }, (data) => {
+      const newEntry = {
+        claim: result.claim,
+        verdict: result.verdict,
+        explanation: result.explanation,
+        confidence: result.confidence,
+        sources: result.sources || [],
+        provider: result.provider,
+        url: result.url,
+        sourceType: result.sourceType,
+        timestamp: result.timestamp
+      };
+
+      const updatedLog = [newEntry, ...(data.factCheckLog || [])].slice(0, 200);
+      const updatedCount = (data.claimsChecked || 0) + 1;
+
+      chrome.storage.local.set({
+        factCheckLog: updatedLog,
+        claimsChecked: updatedCount,
+        lastUpdated: Date.now()
+      });
+    });
+  }
+
   sendResultToTab(tabId, result) {
     chrome.tabs.sendMessage(tabId, {
       type: 'FACT_CHECK_RESULT',
@@ -294,6 +327,136 @@ class FactCheckService {
 
   clearCache() {
     this.cache.clear();
+  }
+}
+
+class MockProvider {
+  async check(claim) {
+    const lowerClaim = claim.toLowerCase();
+    const patterns = {
+      'TRUE': ['sky is blue', 'earth is round', 'water is wet'],
+      'FALSE': ['earth is flat', 'vaccines cause autism', 'moon landing was fake'],
+      'MIXED': ['coffee is healthy', 'carbs are bad']
+    };
+
+    let verdict = 'UNVERIFIED';
+    let confidence = 0.5;
+
+    for (const [category, keywords] of Object.entries(patterns)) {
+      if (keywords.some(keyword => lowerClaim.includes(keyword))) {
+        verdict = category;
+        confidence = category === 'TRUE' ? 0.9 : category === 'FALSE' ? 0.1 : 0.55;
+        break;
+      }
+    }
+
+    return {
+      verdict,
+      explanation: this.generateExplanation(verdict),
+      confidence,
+      sources: []
+    };
+  }
+
+  generateExplanation(verdict) {
+    const explanations = {
+      'TRUE': 'This claim is supported by reliable sources',
+      'FALSE': 'This claim contradicts established facts',
+      'MIXED': 'This claim contains both accurate and inaccurate elements',
+      'UNVERIFIED': 'Insufficient evidence to verify this claim'
+    };
+    return explanations[verdict] || 'Verification pending';
+  }
+}
+
+class OpenKnowledgeProvider {
+  async check(claim, context = {}) {
+    const [wikiResult, twitterResult] = await Promise.all([
+      this.queryWikipedia(claim),
+      this.queryTwitterContext(claim)
+    ]);
+
+    const sources = [];
+    if (wikiResult?.url) sources.push(wikiResult.url);
+    if (twitterResult?.url) sources.push(twitterResult.url);
+
+    const verdict = this.deriveVerdict(wikiResult, twitterResult);
+    const explanation = this.buildExplanation(wikiResult, twitterResult, verdict);
+    const confidence = this.estimateConfidence(wikiResult, twitterResult, context.confidenceThreshold);
+
+    return {
+      verdict,
+      explanation,
+      confidence,
+      sources
+    };
+  }
+
+  async queryWikipedia(claim) {
+    const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&origin=*&srsearch=${encodeURIComponent(claim)}&srlimit=1`;
+    const response = await fetch(searchUrl);
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const hit = data?.query?.search?.[0];
+    if (!hit) return null;
+
+    const cleanSnippet = hit.snippet ? hit.snippet.replace(/<[^>]+>/g, '') : '';
+    const pageTitle = hit.title.replace(/\s+/g, '_');
+    return {
+      title: hit.title,
+      snippet: cleanSnippet,
+      url: `https://en.wikipedia.org/wiki/${encodeURIComponent(pageTitle)}`
+    };
+  }
+
+  async queryTwitterContext(claim) {
+    const searchUrl = `https://r.jina.ai/https://twitter.com/search?q=${encodeURIComponent(claim)}&src=typed_query&f=live`;
+    const response = await fetch(searchUrl);
+    if (!response.ok) return null;
+
+    const body = await response.text();
+    const tweetMatch = body.match(/data-testid="tweet"[\s\S]*?<span[^>]*>([^<]{20,280})/i);
+    const snippet = tweetMatch ? tweetMatch[1].replace(/\s+/g, ' ').trim() : null;
+
+    return {
+      snippet,
+      url: `https://twitter.com/search?q=${encodeURIComponent(claim)}`
+    };
+  }
+
+  deriveVerdict(wikiResult, twitterResult) {
+    if (wikiResult?.snippet && /hoax|false|misinformation|debunked/i.test(wikiResult.snippet)) {
+      return 'FALSE';
+    }
+    if (wikiResult?.snippet && /is a|was a|are the|known for/i.test(wikiResult.snippet)) {
+      return 'TRUE';
+    }
+    if (twitterResult?.snippet && /disputed|mixed|questionable/i.test(twitterResult.snippet)) {
+      return 'MIXED';
+    }
+    return 'UNVERIFIED';
+  }
+
+  buildExplanation(wikiResult, twitterResult, verdict) {
+    const parts = [];
+    if (wikiResult?.title) {
+      parts.push(`Wikipedia context: ${wikiResult.title}${wikiResult.snippet ? ' — ' + wikiResult.snippet : ''}`);
+    }
+    if (twitterResult?.snippet) {
+      parts.push(`Twitter chatter: ${twitterResult.snippet}`);
+    }
+    if (parts.length === 0) {
+      return 'No open sources found yet; monitoring for updates.';
+    }
+    return `${verdict === 'TRUE' ? 'Supported by public knowledge.' : 'Open source context gathered.'} ${parts.join(' | ')}`;
+  }
+
+  estimateConfidence(wikiResult, twitterResult, threshold = 50) {
+    let base = 0.45;
+    if (wikiResult) base += 0.25;
+    if (twitterResult?.snippet) base += 0.1;
+    return Math.min(1, Math.max(0, base + threshold / 500));
   }
 }
 

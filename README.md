@@ -18,6 +18,7 @@ PopFact is a browser extension that provides real-time fact-checking for web con
 - Automatic detection of declarative statements
 - Background processing with intelligent caching
 - Configurable confidence thresholds
+- Uses open knowledge sources (Wikipedia + Twitter context) by default so you can fact-check without private API keys
 
 🎛️ **Customizable Settings**
 - Choose which content types to monitor
@@ -108,6 +109,7 @@ Implement your own fact-checking service:
 3. **View Results**: Fact-checked claims scroll across the bottom with color-coded verdicts
 
 4. **Configure Settings**: Click the extension icon to access settings and statistics
+5. **Send Wrap-up Email**: From the popup, choose "Send Wrap-up Email" to launch an email draft with a spreadsheet-style summary of the latest fact checks
 
 ## How It Works
 
