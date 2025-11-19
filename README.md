@@ -31,11 +31,11 @@ PopFact is a browser extension that demonstrates a CNN-style fact-checking ticke
 - Matches against keyword patterns
 - Displays mock results in ticker
 
-⚡ **Local Processing**
-- All analysis happens in your browser
-- No data sent to external servers
-- Fast, instant results
-- Works offline
+⚡ **Real-time Processing**
+- Automatic detection of declarative statements
+- Background processing with intelligent caching
+- Configurable confidence thresholds
+- Uses open knowledge sources (Wikipedia + Twitter context) by default so you can fact-check without private API keys
 
 🎛️ **Customizable Settings**
 - Ticker speed control
@@ -126,23 +126,8 @@ The ticker will automatically:
 
 ## Project Structure
 
-```
-PopFact/
-├── manifest.json           # Extension configuration
-├── background.js           # Service worker (mock fact-checking)
-├── content.js              # Content script (overlay injection)
-├── overlay.css             # Ticker styling
-├── popup.html/js/css       # Settings UI
-├── disclaimer.html         # First-install disclaimer
-├── icons/                  # Extension icons
-│   ├── icon.svg           # Source icon
-│   └── icon*.png          # Generated PNG icons
-├── README.md              # This file
-├── PRIVACY_POLICY.md      # Privacy policy
-├── PRODUCTION_AUDIT.md    # Store compliance audit
-├── QUICK_START_PRODUCTION.md  # Submission guide
-└── LICENSE                # Apache 2.0 license
-```
+4. **Configure Settings**: Click the extension icon to access settings and statistics
+5. **Send Wrap-up Email**: From the popup, choose "Send Wrap-up Email" to launch an email draft with a spreadsheet-style summary of the latest fact checks
 
 ## Development
 
@@ -180,11 +165,49 @@ See [DEBUG.md](DEBUG.md) for comprehensive debugging guide.
 
 ## Production Deployment
 
-### Current Status
+- Node.js 18+ (for development tools)
+- Chrome or Firefox browser
+- API key for fact-checking service
 
 ❌ **NOT READY FOR PRODUCTION** - Critical issues must be fixed first.
 
-See [PRODUCTION_STATUS.md](PRODUCTION_STATUS.md) for detailed status.
+PopFact includes a comprehensive QA test suite built with Playwright.
+
+**Quick Start:**
+```bash
+# Install dependencies
+npm install
+
+# Install Playwright browsers
+npx playwright install chromium
+
+# Run all tests
+npm test
+
+# Run tests with UI
+npm run test:ui
+```
+
+**Test Categories:**
+- **Basic Overlay Tests** - Core functionality (9 tests)
+- **Fact-Checking Tests** - Mocked AI responses (9 tests)
+- **Performance Tests** - < 200ms load time (8 tests)
+- **Anti-Fragility Tests** - Edge cases and resilience (11 tests)
+
+**Key Features:**
+- 🚫 No live API calls (all responses mocked)
+- ⚡ Performance guardrails (< 200ms overlay load)
+- 🎯 Resilient selectors (works with HTML changes)
+- 📊 36 comprehensive tests
+
+For detailed testing documentation, see [TESTING.md](TESTING.md) and [tests/README.md](tests/README.md).
+
+### Manual Testing
+
+1. Load the extension in developer mode
+2. Visit any news website or article
+3. Open the browser console to see PopFact logs
+4. Watch the ticker for fact-check results
 
 ### Required Before Store Submission
 
