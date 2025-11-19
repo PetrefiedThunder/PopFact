@@ -43,7 +43,14 @@ class FactCheckService {
 
   setupMessageListener() {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      // Validate sender has a valid tab
+      // Handle CLEAR_CACHE from popup (no tab context needed)
+      if (message.type === 'CLEAR_CACHE') {
+        this.clearCache();
+        sendResponse({ success: true });
+        return true;
+      }
+
+      // Validate sender has a valid tab for other message types
       if (!sender.tab || !sender.tab.id) {
         console.warn('PopFact: Message received without valid tab context');
         return false;
@@ -60,6 +67,24 @@ class FactCheckService {
 
   async handleFactCheckRequest(message, tabId) {
     const { claim, source, url, timestamp } = message;
+
+    // Validate inputs to prevent DoS
+    if (!claim || typeof claim !== 'string' || claim.length < 10 || claim.length > 1000) {
+      console.warn('PopFact: Invalid claim length');
+      return;
+    }
+    if (!source || typeof source !== 'string' || source.length > 50) {
+      console.warn('PopFact: Invalid source');
+      return;
+    }
+    if (!url || typeof url !== 'string' || url.length > 500) {
+      console.warn('PopFact: Invalid URL');
+      return;
+    }
+    if (!Number.isInteger(tabId) || tabId < 0) {
+      console.warn('PopFact: Invalid tabId');
+      return;
+    }
 
     // Validate timestamp to prevent replay attacks
     if (!timestamp || timestamp > Date.now() + 1000 || timestamp < Date.now() - 86400000) {
@@ -84,6 +109,12 @@ class FactCheckService {
         explanation: 'Rate limit exceeded. Please try again later.',
         confidence: 0
       });
+      return;
+    }
+
+    // Limit queue size to prevent DoS
+    if (this.queue.length >= 100) {
+      console.warn('PopFact: Queue full, rejecting request');
       return;
     }
 
