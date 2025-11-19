@@ -66,26 +66,36 @@ function setupEventListeners() {
 }
 
 function saveSettings() {
-  // Non-sensitive settings for sync storage
-  const syncSettings = {
-    enableText: document.getElementById('enable-text').checked,
-    enableAudio: document.getElementById('enable-audio').checked,
-    enableVideo: document.getElementById('enable-video').checked,
-    tickerSpeed: document.getElementById('ticker-speed').value,
-    confidenceThreshold: parseInt(document.getElementById('confidence-threshold').value),
-    apiProvider: document.getElementById('api-provider').value
+  // Get and validate all inputs to prevent DOM manipulation
+  const enableText = document.getElementById('enable-text').checked;
+  const enableAudio = document.getElementById('enable-audio').checked;
+  const enableVideo = document.getElementById('enable-video').checked;
+  const tickerSpeed = document.getElementById('ticker-speed').value;
+  const confidenceThreshold = parseInt(document.getElementById('confidence-threshold').value);
+  const apiProvider = document.getElementById('api-provider').value;
+  const apiKey = document.getElementById('api-key').value;
+
+  // Validate all values
+  const validatedSyncSettings = {
+    enableText: Boolean(enableText),
+    enableAudio: Boolean(enableAudio),
+    enableVideo: Boolean(enableVideo),
+    tickerSpeed: ['slow', 'medium', 'fast'].includes(tickerSpeed) ? tickerSpeed : 'medium',
+    confidenceThreshold: Math.max(0, Math.min(100, confidenceThreshold || 50)),
+    apiProvider: ['mock', 'openai', 'claude', 'google', 'custom'].includes(apiProvider) ? apiProvider : 'mock'
   };
 
-  // Sensitive API key for local storage only (not synced)
-  const localSettings = {
-    apiKey: document.getElementById('api-key').value
+  // Validate API key (max length)
+  const validatedLocalSettings = {
+    apiKey: typeof apiKey === 'string' && apiKey.length <= 500 ? apiKey : ''
   };
 
   // Save both
-  chrome.storage.sync.set(syncSettings);
-  chrome.storage.local.set(localSettings, () => {
+  chrome.storage.sync.set(validatedSyncSettings);
+  chrome.storage.local.set(validatedLocalSettings, () => {
     // Show success feedback
     const btn = document.getElementById('save-settings');
+    if (!btn) return;
     const originalText = btn.textContent;
     btn.textContent = '✓ Saved!';
     btn.style.background = '#28a745';
