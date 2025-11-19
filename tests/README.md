@@ -1,231 +1,272 @@
-# PopFact Test Suite
+# PopFact QA Testing Suite
 
-This directory contains the comprehensive test suite for the PopFact browser extension.
+This directory contains the end-to-end testing suite for the PopFact browser extension using Playwright.
 
-## 🧪 Test Framework
+## Overview
 
-- **Framework:** Playwright (TypeScript)
-- **Browser:** Chromium
-- **Test Runner:** Playwright Test Runner
-- **Language:** TypeScript
+The PopFact QA suite is designed to ensure the extension is:
+- **Stable**: Works reliably across different web pages
+- **Performant**: Doesn't slow down page load or rendering
+- **Non-breaking**: Doesn't interfere with website functionality
+- **Resilient**: Handles edge cases and HTML structure changes
 
-## 📁 Test Files
+## Test Categories
 
-### Automated Tests
+### 1. Basic Overlay Tests (`overlay-basic.spec.ts`)
+Tests fundamental overlay functionality:
+- Overlay injection and visibility
+- Toggle button functionality
+- Status indicators
+- Z-index positioning
+- Non-interference with page scrolling
 
-1. **extension-validation.spec.ts** (15 tests)
-   - File existence and structure validation
-   - Code syntax checking
-   - Manifest validation
-   - CSS selector verification
-   - Security audit
-   - Documentation checks
-   - **Status:** ✅ All passing
+### 2. Fact-Checking Tests (`fact-checking.spec.ts`)
+Tests the fact-checking flow with mocked responses:
+- TRUE verdict display (green ✓)
+- FALSE verdict display (red ✗)
+- MIXED verdict display (yellow !)
+- UNVERIFIED verdict display (gray ?)
+- Multiple concurrent fact checks
+- Claim truncation
+- Loading state management
 
-2. **extension.spec.ts** (18 tests)
-   - Full E2E browser automation tests
-   - Extension loading verification
-   - Ticker overlay display tests
-   - Fact-checking functionality
-   - Animation and performance
-   - Error handling
-   - Visual regression tests
-   - **Status:** ⚠️ Requires non-headless browser (extension limitation)
+### 3. Performance Tests (`performance.spec.ts`)
+Ensures performance guardrails:
+- **Time to First Paint < 200ms** - Overlay appears quickly
+- Frame rate > 30 FPS for smooth animations
+- Memory footprint < 50MB
+- No blocking of page interactions
+- Efficient handling of dynamic content
+- No layout thrashing
 
-### Manual Test Tools
+### 4. Anti-Fragility Tests (`anti-fragility.spec.ts`)
+Tests resilience and robustness:
+- Works with complex nested HTML structures
+- Handles pages with no declarative statements
+- Supports special characters and Unicode
+- Efficient on very long pages
+- Resistant to CSS conflicts
+- Handles rapid DOM changes
+- Works with iframes and shadow DOM
+- Graceful error handling
+- Doesn't interfere with page JavaScript
 
-1. **manual-test.sh**
-   - Quick validation script
-   - Checks file existence
-   - Validates syntax
-   - Reports on structure
+## Key Testing Strategies
 
-2. **quick-test.html**
-   - Visual test page
-   - Interactive test interface
-   - Console logging verification
-   - User-friendly testing experience
+### Shadow DOM Testing
+While our overlay doesn't use Shadow DOM itself, we use resilient selectors:
+```typescript
+// ✅ Good - Stable ID selector
+page.locator('#popfact-overlay')
 
-## 🚀 Running Tests
+// ✅ Good - Semantic class selector
+page.locator('.popfact-item.true')
 
-### Quick Validation (Recommended)
+// ❌ Bad - Brittle structure selector
+page.locator('div > div > span')
+```
+
+### Network Mocking
+We mock API responses to avoid live API calls:
+```typescript
+import { mockFactCheckResponse } from './utils/network-mocking';
+
+await mockFactCheckResponse(page, {
+  claim: 'test claim',
+  verdict: 'FALSE',
+  explanation: 'This is a known hoax',
+  confidence: 0.1,
+});
+```
+
+### Performance Guardrails
+Performance tests fail if thresholds are exceeded:
+```typescript
+// Overlay must appear within 200ms
+const result = await checkOverlayPerformance(page, 200);
+expect(result.passed).toBe(true);
+```
+
+## Running Tests
+
+### Install Dependencies
+```bash
+npm install
+npx playwright install chromium
+```
+
+### Run All Tests
 ```bash
 npm test
 ```
-Runs the validation test suite that checks code structure, syntax, and configuration without requiring a browser.
 
-### All Tests
-```bash
-npm run test:all
-```
-Runs both validation and E2E tests (Note: E2E tests may have limitations with extension loading in CI/CD).
-
-### Interactive Mode
-```bash
-npm run test:ui
-```
-Opens Playwright's interactive UI for running and debugging tests.
-
-### Headed Mode (See Browser)
+### Run Tests in Headed Mode
 ```bash
 npm run test:headed
 ```
-Runs tests with a visible browser window (useful for debugging).
 
-### Debug Mode
+### Run Tests with UI
+```bash
+npm run test:ui
+```
+
+### Debug Tests
 ```bash
 npm run test:debug
 ```
-Runs tests with Playwright Inspector for step-by-step debugging.
 
-### Manual Validation
+### View Test Report
 ```bash
-npm run validate
-# or
-./manual-test.sh
+npm run test:report
 ```
 
-## 📊 Test Coverage
+### Run Specific Test File
+```bash
+npx playwright test tests/performance.spec.ts
+```
 
-### Core Functionality ✅
-- [x] Extension files exist and are valid
-- [x] Manifest V3 compliance
-- [x] Content script structure
-- [x] Background service worker
-- [x] Message passing architecture
-- [x] Mock fact-checking logic
-- [x] CSS styling and animations
-- [x] Icons in all required sizes
+### Run Tests Matching Pattern
+```bash
+npx playwright test -g "performance"
+```
 
-### Code Quality ✅
-- [x] JavaScript syntax validation
-- [x] No security vulnerabilities
-- [x] Error handling implementation
-- [x] Debug logging present
+## Test Utilities
 
-### Documentation ✅
-- [x] README completeness
-- [x] Installation instructions
-- [x] Debug page guidance
+### Network Mocking (`utils/network-mocking.ts`)
+- `mockFactCheckResponse()` - Mock a single response
+- `mockFactCheckResponses()` - Mock multiple responses with pattern matching
+- `mockApiEndpoint()` - Mock external API endpoints
 
-## 🎯 Test Results
+### Shadow DOM Helpers (`utils/shadow-dom.ts`)
+- `getOverlay()` - Get the overlay element
+- `getFactItems()` - Get all fact check items
+- `waitForFactItem()` - Wait for a fact item to appear
+- `toggleOverlay()` - Toggle overlay visibility
 
-**Latest Run:** November 18, 2025  
-**Tests Run:** 15  
-**Passed:** 15  
-**Failed:** 0  
-**Pass Rate:** 100% ✅
+### Performance Utilities (`utils/performance.ts`)
+- `checkOverlayPerformance()` - Measure time to first paint
+- `measureTickerFPS()` - Measure animation frame rate
+- `measureMemoryImpact()` - Check memory usage
 
-## 📝 Manual Testing Checklist
+## Test Fixtures
 
-For complete verification, perform these manual tests in Chrome:
+### Test Page (`fixtures/test-page.html`)
+A sample news article with various types of claims:
+- TRUE claims: "The sky is blue", "The Earth is round"
+- FALSE claims: "Moon landing was fake", "Vaccines cause autism"
+- MIXED claims: "Coffee is healthy"
+- Dynamic content injection for testing MutationObserver
 
-### Installation
-- [ ] Load extension at chrome://extensions/
-- [ ] Enable "Developer mode"
-- [ ] Click "Load unpacked" and select PopFact directory
-- [ ] Verify no errors appear
+## Writing New Tests
 
-### Functionality
-- [ ] Open debug-test.html or quick-test.html
-- [ ] Black ticker appears at bottom within 5 seconds
-- [ ] Red "PopFact" branding visible
-- [ ] Fact-check results scroll across ticker
-- [ ] Color-coded verdicts (green/red/yellow/gray)
-- [ ] Smooth animation
+### Example: Test a New Feature
+```typescript
+import { test, expect } from '@playwright/test';
+import { getOverlay, waitForOverlay } from './utils/shadow-dom';
+import { mockFactCheckResponse } from './utils/network-mocking';
 
-### Console Verification
-- [ ] "PopFact: Overlay initialized" message
-- [ ] "Extracted X claims" message
-- [ ] "Processing fact-check request" messages
-- [ ] No JavaScript errors
+test('should display custom verdict icon', async ({ page }) => {
+  // Set up mock
+  await mockFactCheckResponse(page, {
+    claim: 'test',
+    verdict: 'TRUE',
+    explanation: 'Verified',
+    confidence: 0.9,
+  });
+  
+  // Navigate to test page
+  await page.goto(`file://${process.cwd()}/tests/fixtures/test-page.html`);
+  
+  // Wait for overlay
+  await waitForOverlay(page);
+  
+  // Assert expected behavior
+  const item = page.locator('.popfact-item.true').first();
+  await expect(item).toBeVisible();
+});
+```
 
-### Popup
-- [ ] Click extension icon
-- [ ] Popup opens with settings
-- [ ] All UI elements visible
-- [ ] Controls are functional
+## CI/CD Integration
 
-### Real World
-- [ ] Test on CNN.com, BBC.com, or NYTimes.com
-- [ ] Ticker appears on real websites
-- [ ] Claims extracted from articles
-- [ ] No interference with site functionality
+Tests are designed to run in CI environments:
+- Headless by default
+- Retries enabled on CI
+- Artifacts captured on failure
+- HTML report generation
 
-## 🔧 Troubleshooting
-
-### Tests Timing Out
-- Extension loading in headless mode has limitations
-- Run validation tests instead: `npm test`
-- Use headed mode for visual confirmation: `npm run test:headed`
-
-### Extension Not Loading
-- Verify all files exist: `./manual-test.sh`
-- Check manifest.json syntax
-- Review console errors in Chrome DevTools
-
-### No Ticker Appearing
-- Ensure extension is loaded in chrome://extensions/
-- Reload the extension
-- Reload the test page
-- Check browser console for errors
-
-## 📚 Documentation
-
-- **TEST_REPORT.md** - Comprehensive test report with detailed results
-- **TESTING_SUMMARY.md** - Executive summary of testing efforts
-- **playwright.config.ts** - Playwright configuration
-- **tsconfig.json** - TypeScript configuration
-
-## 🎬 CI/CD Integration
-
-For CI/CD pipelines, use the validation test suite:
-
+### Example GitHub Actions Workflow
 ```yaml
-# Example GitHub Actions
 - name: Install dependencies
-  run: npm install
+  run: npm ci
+
+- name: Install Playwright
+  run: npx playwright install --with-deps chromium
 
 - name: Run tests
   run: npm test
+
+- name: Upload report
+  if: always()
+  uses: actions/upload-artifact@v3
+  with:
+    name: playwright-report
+    path: playwright-report/
 ```
 
-The validation tests don't require browser automation and are perfect for CI/CD environments.
+## Best Practices
 
-## 🔐 Security Testing
+1. **Use Resilient Selectors**: Prefer IDs and semantic classes over structural selectors
+2. **Mock External Calls**: Always mock API responses to avoid live calls
+3. **Test Performance**: Include timing assertions for critical paths
+4. **Handle Async**: Use proper waits instead of arbitrary timeouts
+5. **Test Edge Cases**: Include tests for error conditions and edge cases
+6. **Keep Tests Isolated**: Each test should be independent
+7. **Document Intent**: Use descriptive test names and comments
 
-Security checks included:
-- ✅ No eval() usage
-- ✅ No dangerous innerHTML patterns
-- ✅ Safe DOM manipulation
-- ✅ User input sanitization
-- ✅ No external script injection
+## Troubleshooting
 
-## 📈 Future Enhancements
+### Tests Timeout
+- Increase timeout in test: `test.setTimeout(60000)`
+- Check if overlay is actually loading
+- Verify extension is loaded in browser
 
-1. **Unit Tests:** Add Jest for function-level testing
-2. **Integration Tests:** Test API integration with live services
-3. **Performance Tests:** Benchmark claim extraction and rendering
-4. **Cross-Browser Tests:** Add Firefox and Edge specific tests
-5. **Visual Regression:** Automated screenshot comparison
-6. **Accessibility Tests:** WCAG compliance checking
+### Extension Not Loading
+- Ensure manifest.json is valid
+- Check playwright.config.ts extension path
+- Verify all extension files are present
 
-## 🤝 Contributing
+### Flaky Tests
+- Use proper wait conditions instead of `waitForTimeout()`
+- Check for race conditions
+- Ensure test isolation
 
-When adding new features:
-1. Write tests first (TDD approach)
-2. Ensure all existing tests pass
-3. Add documentation for new test cases
-4. Update this README if adding new test files
+### Performance Tests Failing
+- Run in headed mode to see visual issues
+- Check browser console for errors
+- Verify host machine performance
 
-## 📞 Support
+## Future Enhancements
 
-If tests fail unexpectedly:
-1. Check test-results/ directory for screenshots
-2. Review test-results/*.png for visual evidence
-3. Check playwright-report/ for HTML reports
-4. Run `npm run test:ui` for interactive debugging
+- [ ] Visual regression testing with screenshot comparison
+- [ ] Cross-browser testing (Firefox, Safari)
+- [ ] Accessibility testing (ARIA, keyboard navigation)
+- [ ] Load testing with large pages (>10k elements)
+- [ ] Real browser extension environment testing
+- [ ] Integration with real fact-checking APIs (staging)
+- [ ] Mobile device testing
 
----
+## Contributing
 
-**Happy Testing! 🧪✨**
+When adding new tests:
+1. Follow the existing test structure
+2. Add to appropriate test category or create new file
+3. Update this README with new test descriptions
+4. Ensure tests pass locally before committing
+5. Keep tests fast (< 30s per test ideally)
+
+## Support
+
+For issues or questions about the test suite:
+- Check existing test files for examples
+- Review Playwright documentation: https://playwright.dev
+- Open an issue on GitHub
