@@ -30,21 +30,33 @@ class PopFactOverlay {
     this.overlay = document.createElement('div');
     this.overlay.id = 'popfact-overlay';
 
-    // Create exact CNN-style ticker structure
-    this.overlay.innerHTML = `
-      <div id="popfact-bar">
-        <div class="popfact-brand">PopFact</div>
-        <div class="popfact-ticker">
-          <div id="popfact-ticker-inner"></div>
-        </div>
-        <div class="popfact-status" id="popfact-status">LIVE FACT-CHECK DEMO</div>
-      </div>
-    `;
+    // Create exact CNN-style ticker structure using safe DOM methods
+    const bar = document.createElement('div');
+    bar.id = 'popfact-bar';
+
+    const brand = document.createElement('div');
+    brand.className = 'popfact-brand';
+    brand.textContent = 'PopFact';
+
+    const ticker = document.createElement('div');
+    ticker.className = 'popfact-ticker';
+
+    this.tickerInner = document.createElement('div');
+    this.tickerInner.id = 'popfact-ticker-inner';
+    ticker.appendChild(this.tickerInner);
+
+    const status = document.createElement('div');
+    status.className = 'popfact-status';
+    status.id = 'popfact-status';
+    status.textContent = '⚠️ DEMO ONLY - MOCK DATA';
+
+    bar.appendChild(brand);
+    bar.appendChild(ticker);
+    bar.appendChild(status);
+    this.overlay.appendChild(bar);
 
     // Add to page
     document.body.appendChild(this.overlay);
-
-    this.tickerInner = document.getElementById('popfact-ticker-inner');
   }
 
   // TASK 3: Simple claim extraction from page
@@ -126,8 +138,10 @@ class PopFactOverlay {
 
   // TASK 3: Update ticker with fact-check results
   updateTicker() {
-    // Clear existing ticker content
-    this.tickerInner.innerHTML = '';
+    // Clear existing ticker content safely
+    while (this.tickerInner.firstChild) {
+      this.tickerInner.removeChild(this.tickerInner.firstChild);
+    }
 
     // Create items for each fact result
     this.factResults.forEach(result => {
