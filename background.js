@@ -424,6 +424,7 @@ class OpenKnowledgeProvider {
       url: `https://twitter.com/search?q=${encodeURIComponent(claim)}`
     };
   }
+});
 
   deriveVerdict(wikiResult, twitterResult) {
     if (wikiResult?.snippet && /hoax|false|misinformation|debunked/i.test(wikiResult.snippet)) {
@@ -458,18 +459,6 @@ class OpenKnowledgeProvider {
     if (twitterResult?.snippet) base += 0.1;
     return Math.min(1, Math.max(0, base + threshold / 500));
   }
-}
-
-// Initialize service
-const factCheckService = new FactCheckService();
-
-// Handle extension icon click
-chrome.action.onClicked.addListener((tab) => {
-  console.log('PopFact: Extension icon clicked');
 });
 
-// Clean up cache periodically (every 30 minutes)
-setInterval(() => {
-  factCheckService.clearCache();
-  console.log('PopFact: Cache cleared');
-}, 30 * 60 * 1000);
+console.log('PopFact Background Service: Initialized (Mock Mode)');

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PopFact - Important Disclaimer</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 600px;
+      margin: 50px auto;
+      padding: 30px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #c62828;
+      margin-top: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .warning-icon {
+      font-size: 32px;
+    }
+    .warning-box {
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .warning-box strong {
+      display: block;
+      margin-bottom: 10px;
+      color: #856404;
+    }
+    .info-box {
+      background: #e3f2fd;
+      border-left: 4px solid #2196f3;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    h2 {
+      color: #333;
+      font-size: 18px;
+      margin-top: 25px;
+    }
+    ul {
+      line-height: 1.8;
+    }
+    .cta {
+      background: #c62828;
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 4px;
+      font-size: 16px;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 20px;
+    }
+    .cta:hover {
+      background: #a52020;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 14px;
+      color: #666;
+    }
+    a {
+      color: #2196f3;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>
+      <span class="warning-icon">⚠️</span>
+      Important Disclaimer
+    </h1>
+
+    <div class="warning-box">
+      <strong>This is a DEMONSTRATION extension</strong>
+      <p>PopFact uses simple keyword matching, <strong>NOT real fact-checking</strong>.</p>
+      <p style="margin-bottom: 0;"><strong>DO NOT rely on these results for accurate information.</strong></p>
+    </div>
+
+    <h2>What PopFact Does:</h2>
+    <ul>
+      <li>Displays a CNN-style news ticker at the bottom of web pages</li>
+      <li>Extracts text content from pages you visit</li>
+      <li>Matches claims against simple keyword patterns</li>
+      <li>Shows <strong>mock</strong> results in the ticker (for demo purposes)</li>
+    </ul>
+
+    <h2>What PopFact Does NOT Do:</h2>
+    <ul>
+      <li>Connect to real fact-checking databases</li>
+      <li>Provide accurate or reliable verification</li>
+      <li>Use AI or machine learning for analysis</li>
+      <li>Transmit your data to external servers</li>
+    </ul>
+
+    <div class="info-box">
+      <strong>How It Works:</strong>
+      <p style="margin: 0;">The extension uses basic keyword detection (e.g., "climate change" → TRUE, "flat earth" → FALSE). All processing happens locally in your browser. This is a proof-of-concept demonstration only.</p>
+    </div>
+
+    <h2>For Real Fact-Checking, Visit:</h2>
+    <ul>
+      <li><a href="https://www.snopes.com" target="_blank">Snopes.com</a> - Fact-checking since 1994</li>
+      <li><a href="https://www.factcheck.org" target="_blank">FactCheck.org</a> - Nonpartisan fact-checking</li>
+      <li><a href="https://www.politifact.com" target="_blank">PolitiFact.com</a> - Pulitzer Prize winning fact-checking</li>
+      <li><a href="https://www.reuters.com/fact-check" target="_blank">Reuters Fact Check</a> - Global fact-checking</li>
+    </ul>
+
+    <button class="cta" onclick="window.close()">I Understand</button>
+
+    <div class="footer">
+      <p>PopFact is open source: <a href="https://github.com/PetrefiedThunder/PopFact" target="_blank">View on GitHub</a></p>
+      <p style="margin-top: 5px;">By using this extension, you acknowledge these limitations.</p>
+    </div>
+  </div>
+</body>
+</html>

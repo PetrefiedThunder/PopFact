@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PopFact Debug Test Page</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    h1 { color: #c62828; }
+    h2 { color: #333; margin-top: 30px; }
+    p { margin: 15px 0; }
+    .test-section {
+      background: #f5f5f5;
+      padding: 15px;
+      margin: 20px 0;
+      border-left: 4px solid #c62828;
+    }
+    code {
+      background: #e0e0e0;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: monospace;
+    }
+    .instructions {
+      background: #fff3cd;
+      padding: 15px;
+      border: 1px solid #ffc107;
+      border-radius: 4px;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>PopFact Debug Test Page</h1>
+
+  <div class="instructions">
+    <strong>🔍 How to use this page:</strong>
+    <ol>
+      <li>Load the PopFact extension in Chrome (chrome://extensions/)</li>
+      <li>Open this HTML file in your browser</li>
+      <li>Open DevTools console (F12) to see debug logs</li>
+      <li>Look for the black ticker at the bottom of the page</li>
+      <li>Watch the console for extraction and fact-check messages</li>
+    </ol>
+  </div>
+
+  <div class="test-section">
+    <h2>Test Claims for Mock Fact-Checking</h2>
+    <p>
+      The earth is round and orbits the sun in approximately 365 days, which is why we have seasons throughout the year.
+    </p>
+    <p>
+      Climate change and global warming are accelerating due to human activities and greenhouse gas emissions from fossil fuels.
+    </p>
+    <p>
+      Some people believe the earth is flat despite overwhelming scientific evidence to the contrary from satellite imagery.
+    </p>
+    <p>
+      COVID-19 vaccines have been shown to be effective in preventing severe disease according to multiple peer-reviewed studies.
+    </p>
+    <p>
+      The 2020 election was conducted with widespread fraud according to claims that have been debunked by multiple courts.
+    </p>
+  </div>
+
+  <h2>What Should Happen</h2>
+  <ul>
+    <li><strong>Bottom Ticker:</strong> Black bar (52px height) fixed at bottom of viewport</li>
+    <li><strong>Brand Label:</strong> Red "PopFact" label on left side</li>
+    <li><strong>Scrolling Text:</strong> Fact-check results scrolling right to left</li>
+    <li><strong>Color Coding:</strong>
+      <ul>
+        <li style="color: #4caf50;">Green = TRUE (earth is round, climate, vaccines)</li>
+        <li style="color: #ff5252;">Red = FALSE (flat earth, 2020 election fraud)</li>
+        <li style="color: #ffb300;">Yellow = MIXED (COVID context-dependent)</li>
+        <li style="color: #b0bec5;">Gray = UNVERIFIED (other claims)</li>
+      </ul>
+    </li>
+    <li><strong>Console Logs:</strong>
+      <ul>
+        <li><code>PopFact: Overlay initialized</code></li>
+        <li><code>PopFact: Extracted 5 claims for fact-checking</code></li>
+        <li><code>PopFact: Processing fact-check request: [claim text]</code></li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>Debug Console Commands</h2>
+  <div class="test-section">
+    <p>Open DevTools console and try these commands:</p>
+    <pre>
+// Check if overlay exists
+document.getElementById('popfact-overlay')
+
+// Check ticker content
+document.getElementById('popfact-ticker-inner')?.textContent
+
+// Force re-extraction (in content script context)
+// (Note: You may need to run this in the extension's context)
+</pre>
+  </div>
+
+  <h2>Common Issues & Solutions</h2>
+
+  <h3>❌ Ticker Not Appearing</h3>
+  <ul>
+    <li><strong>Check:</strong> Extension loaded? (chrome://extensions/)</li>
+    <li><strong>Check:</strong> Console for errors?</li>
+    <li><strong>Fix:</strong> Reload page (Ctrl+R)</li>
+    <li><strong>Fix:</strong> Reload extension (click reload button in chrome://extensions/)</li>
+  </ul>
+
+  <h3>❌ No Scrolling Animation</h3>
+  <ul>
+    <li><strong>Check:</strong> Is ticker content duplicated?</li>
+    <li><strong>Check:</strong> CSS loaded? Inspect #popfact-ticker-inner in DevTools</li>
+    <li><strong>Fix:</strong> Ensure overlay.css is in content_scripts</li>
+  </ul>
+
+  <h3>❌ No Fact-Checks Showing</h3>
+  <ul>
+    <li><strong>Check:</strong> Console shows "Extracted X claims"?</li>
+    <li><strong>Check:</strong> Background script running? (chrome://extensions/ → Inspect views: service worker)</li>
+    <li><strong>Fix:</strong> Verify message passing between content and background scripts</li>
+  </ul>
+
+  <h3>❌ Claims Not Being Extracted</h3>
+  <ul>
+    <li><strong>Check:</strong> Are there &lt;p&gt;, &lt;h1-h3&gt; elements on page?</li>
+    <li><strong>Check:</strong> Are sentences > 40 chars and > 6 words?</li>
+    <li><strong>Fix:</strong> This test page has valid claims above</li>
+  </ul>
+
+  <h2>Manual Testing Steps</h2>
+  <ol>
+    <li><strong>Install Extension:</strong>
+      <ul>
+        <li>Open <code>chrome://extensions/</code></li>
+        <li>Enable "Developer mode"</li>
+        <li>Click "Load unpacked"</li>
+        <li>Select PopFact folder</li>
+      </ul>
+    </li>
+    <li><strong>Test on This Page:</strong>
+      <ul>
+        <li>Should see ticker immediately</li>
+        <li>Should see 5 claims extracted (check console)</li>
+        <li>Should see scrolling fact-checks within 1 second</li>
+      </ul>
+    </li>
+    <li><strong>Test on Real News Site:</strong>
+      <ul>
+        <li>Visit CNN.com, BBC.com, or NYTimes.com</li>
+        <li>Same behavior should occur</li>
+      </ul>
+    </li>
+  </ol>
+
+  <h2>Expected Console Output</h2>
+  <div class="test-section">
+    <pre>
+PopFact Background Service: Initialized (Mock Mode)
+PopFact: Overlay initialized
+PopFact: Extracted 5 claims for fact-checking
+PopFact: Processing fact-check request: The earth is round and orbits...
+PopFact: Processing fact-check request: Climate change and global warming...
+PopFact: Processing fact-check request: Some people believe the earth is flat...
+PopFact: Processing fact-check request: COVID-19 vaccines have been shown...
+PopFact: Processing fact-check request: The 2020 election was conducted...
+</pre>
+  </div>
+
+  <h2>File Checklist</h2>
+  <div class="test-section">
+    <p>Verify these files exist in your PopFact directory:</p>
+    <ul>
+      <li>✓ <code>manifest.json</code></li>
+      <li>✓ <code>content.js</code> (167 lines)</li>
+      <li>✓ <code>background.js</code> (71 lines)</li>
+      <li>✓ <code>overlay.css</code> (92 lines)</li>
+      <li>✓ <code>popup.html</code></li>
+      <li>✓ <code>popup.js</code></li>
+      <li>✓ <code>popup.css</code></li>
+      <li>✓ <code>icons/</code> directory</li>
+    </ul>
+  </div>
+
+  <p style="margin-top: 50px; padding: 20px; background: #e3f2fd; border-left: 4px solid #2196f3;">
+    <strong>💡 Pro Tip:</strong> Keep DevTools open while testing. All debug logs go to the console.
+    Background script logs appear in the service worker inspector (chrome://extensions/ → "Inspect views: service worker").
+  </p>
+
+  <!-- Extra test content to ensure there's enough text -->
+  <p>
+    This page contains multiple paragraphs with sentences that are longer than forty characters and contain more than six words.
+  </p>
+  <p>
+    The extension should extract up to five claims from this page and send them to the background script for processing.
+  </p>
+  <p>
+    Each claim will be matched against simple heuristic patterns to determine if it is true, false, mixed, or unverified.
+  </p>
+
+  <video style="display:none;"></video>
+  <!-- Hidden video element to trigger media detection -->
+</body>
+</html>
