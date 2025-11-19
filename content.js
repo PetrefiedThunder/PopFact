@@ -227,11 +227,20 @@ class PopFactOverlay {
   }
 
   sendForFactCheck(claim, source) {
+    // Sanitize URL to prevent leaking sensitive parameters
+    let sanitizedUrl = '';
+    try {
+      const url = new URL(window.location.href);
+      sanitizedUrl = url.origin + url.pathname;
+    } catch (e) {
+      sanitizedUrl = 'unknown';
+    }
+
     chrome.runtime.sendMessage({
       type: 'FACT_CHECK_REQUEST',
       claim: claim,
       source: source,
-      url: window.location.href,
+      url: sanitizedUrl,
       timestamp: Date.now()
     });
   }
@@ -257,17 +266,34 @@ class PopFactOverlay {
       category = 'mixed';
     }
 
-    // Create fact check item
+    // Create fact check item using safe DOM methods to prevent XSS
     const factItem = document.createElement('div');
     factItem.className = `popfact-item ${category}`;
-    factItem.innerHTML = `
-      <span class="popfact-item-icon">${this.getVerdictIcon(category)}</span>
-      <span class="popfact-item-text">
-        <span class="popfact-claim">${this.truncate(claim, 80)}</span>
-        <span class="popfact-verdict">${explanation || verdict}</span>
-      </span>
-      <span class="popfact-separator"></span>
-    `;
+
+    const icon = document.createElement('span');
+    icon.className = 'popfact-item-icon';
+    icon.textContent = this.getVerdictIcon(category);
+
+    const textContainer = document.createElement('span');
+    textContainer.className = 'popfact-item-text';
+
+    const claimSpan = document.createElement('span');
+    claimSpan.className = 'popfact-claim';
+    claimSpan.textContent = this.truncate(claim, 80);
+
+    const verdictSpan = document.createElement('span');
+    verdictSpan.className = 'popfact-verdict';
+    verdictSpan.textContent = explanation || verdict;
+
+    textContainer.appendChild(claimSpan);
+    textContainer.appendChild(verdictSpan);
+
+    const separator = document.createElement('span');
+    separator.className = 'popfact-separator';
+
+    factItem.appendChild(icon);
+    factItem.appendChild(textContainer);
+    factItem.appendChild(separator);
 
     // Add to ticker
     this.addToTicker(factItem);
@@ -289,19 +315,21 @@ class PopFactOverlay {
   }
 
   addToTicker(factItem) {
-    // Remove loading message if present
-    const loading = this.tickerScroll.querySelector('.popfact-loading');
-    if (loading) {
-      loading.remove();
-    }
+    // Remove loading message if present (with null check)
+    if (this.tickerScroll) {
+      const loading = this.tickerScroll.querySelector('.popfact-loading');
+      if (loading) {
+        loading.remove();
+      }
 
-    // Add new fact item
-    this.tickerScroll.appendChild(factItem);
+      // Add new fact item
+      this.tickerScroll.appendChild(factItem);
 
-    // Clone items for seamless scrolling
-    if (this.tickerScroll.children.length < 5) {
-      const clone = factItem.cloneNode(true);
-      this.tickerScroll.appendChild(clone);
+      // Clone items for seamless scrolling
+      if (this.tickerScroll.children.length < 5) {
+        const clone = factItem.cloneNode(true);
+        this.tickerScroll.appendChild(clone);
+      }
     }
   }
 }
