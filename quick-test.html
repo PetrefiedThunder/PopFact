@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PopFact Extension - Quick Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: white;
+            color: #333;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #c62828;
+            margin-top: 0;
+        }
+        .test-box {
+            background: #f5f5f5;
+            border-left: 4px solid #c62828;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .claim {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+        }
+        .status {
+            background: #4caf50;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        .instruction {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        button {
+            background: #c62828;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #a52020;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 PopFact Extension - Quick Test Page</h1>
+        
+        <div class="status">
+            ✅ Extension Ready for Testing
+        </div>
+
+        <div class="instruction">
+            <strong>📋 Testing Instructions:</strong>
+            <ol>
+                <li>Make sure the PopFact extension is loaded in Chrome</li>
+                <li>Look at the <strong>bottom of this page</strong> for a black ticker</li>
+                <li>The ticker should show scrolling fact-check results within 2-3 seconds</li>
+                <li>Open DevTools Console (F12) to see debug logs</li>
+                <li>Check for colored verdicts: <span style="color: #4caf50;">GREEN=TRUE</span>, <span style="color: #ff5252;">RED=FALSE</span>, <span style="color: #ffb300;">YELLOW=MIXED</span></li>
+            </ol>
+        </div>
+
+        <div class="test-box">
+            <h2>Test Claims for Fact-Checking</h2>
+            <p style="color: #666; font-style: italic;">
+                These claims should be automatically extracted and fact-checked by the extension:
+            </p>
+
+            <div class="claim">
+                <strong>Claim 1:</strong> The Earth is a sphere that orbits around the Sun completing one revolution approximately every three hundred sixty-five days.
+            </div>
+
+            <div class="claim">
+                <strong>Claim 2:</strong> Climate change is primarily caused by human activities including the burning of fossil fuels and deforestation according to scientific consensus.
+            </div>
+
+            <div class="claim">
+                <strong>Claim 3:</strong> The flat Earth theory has been thoroughly debunked by centuries of scientific evidence including satellite imagery and space exploration.
+            </div>
+
+            <div class="claim">
+                <strong>Claim 4:</strong> COVID-19 vaccines have been proven effective at reducing severe illness and hospitalization rates in multiple large-scale clinical trials.
+            </div>
+
+            <div class="claim">
+                <strong>Claim 5:</strong> The 2020 United States presidential election was conducted with widespread fraud that changed the outcome despite no credible evidence supporting this claim.
+            </div>
+        </div>
+
+        <div class="test-box">
+            <h2>Expected Behavior</h2>
+            <ul>
+                <li>✅ Black ticker bar at bottom of page (52px height)</li>
+                <li>✅ Red "PopFact" branding on left side</li>
+                <li>✅ Scrolling text with fact-check results</li>
+                <li>✅ Color-coded verdicts for each claim</li>
+                <li>✅ Smooth right-to-left animation</li>
+                <li>✅ "LIVE FACT-CHECK DEMO" status on right</li>
+            </ul>
+        </div>
+
+        <div class="test-box">
+            <h2>Console Checks</h2>
+            <p>Open DevTools Console (F12) and verify these messages appear:</p>
+            <ul>
+                <li><code>PopFact: Overlay initialized</code></li>
+                <li><code>PopFact: Extracted 5 claims for fact-checking</code></li>
+                <li><code>PopFact: Processing fact-check request: ...</code></li>
+            </ul>
+        </div>
+
+        <button onclick="testExtension()">🔄 Re-test Extension</button>
+
+        <div class="footer">
+            <p><strong>PopFact v1.0.0</strong> - Real-time Fact Checker</p>
+            <p>Made with ❤️ for accurate information</p>
+        </div>
+    </div>
+
+    <script>
+        function testExtension() {
+            console.log('🔄 Manual re-test triggered');
+            console.log('Checking for PopFact overlay...');
+            
+            const overlay = document.getElementById('popfact-overlay');
+            if (overlay) {
+                console.log('✅ PopFact overlay found!');
+                const ticker = document.getElementById('popfact-ticker-inner');
+                if (ticker && ticker.textContent.trim()) {
+                    console.log('✅ Ticker has content:', ticker.textContent.substring(0, 100) + '...');
+                    alert('✅ PopFact extension is working correctly!\n\nTicker is displaying fact-check results.');
+                } else {
+                    console.log('⚠️ Ticker is empty. Waiting for fact-check results...');
+                    alert('⚠️ Ticker found but no results yet.\n\nWait a few seconds and try again.');
+                }
+            } else {
+                console.log('❌ PopFact overlay not found!');
+                alert('❌ Extension not detected!\n\nMake sure:\n1. Extension is loaded in chrome://extensions/\n2. Page has been reloaded\n3. DevTools console shows no errors');
+            }
+        }
+
+        // Auto-check after page load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                console.log('🔍 Auto-checking PopFact extension...');
+                const overlay = document.getElementById('popfact-overlay');
+                if (overlay) {
+                    console.log('✅ PopFact extension detected and working!');
+                } else {
+                    console.warn('⚠️ PopFact extension not detected. Please load the extension.');
+                }
+            }, 2000);
+        });
+    </script>
+</body>
+</html>
