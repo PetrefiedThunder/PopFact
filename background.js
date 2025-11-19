@@ -5,31 +5,116 @@ class FactCheckService {
   constructor() {
     this.apiEndpoint = 'https://api.example.com/factcheck'; // Replace with actual fact-checking API
     this.cache = new Map();
+    this.cacheMaxSize = 1000; // Prevent unbounded cache growth
     this.queue = [];
     this.processing = false;
 
+    // Rate limiting: token bucket algorithm
+    this.rateLimitTokens = 60; // 60 requests
+    this.rateLimitMax = 60;
+    this.rateLimitRefillRate = 1; // 1 token per second (60 req/min)
+    this.lastRefill = Date.now();
+
     this.setupMessageListener();
+    this.setupRateLimitRefill();
     console.log('PopFact Background Service: Initialized');
+  }
+
+  setupRateLimitRefill() {
+    // Refill tokens every second
+    setInterval(() => {
+      const now = Date.now();
+      const timePassed = (now - this.lastRefill) / 1000;
+      this.rateLimitTokens = Math.min(
+        this.rateLimitMax,
+        this.rateLimitTokens + timePassed * this.rateLimitRefillRate
+      );
+      this.lastRefill = now;
+    }, 1000);
+  }
+
+  checkRateLimit() {
+    if (this.rateLimitTokens >= 1) {
+      this.rateLimitTokens -= 1;
+      return true;
+    }
+    return false;
   }
 
   setupMessageListener() {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      // Handle CLEAR_CACHE from popup (no tab context needed)
+      if (message.type === 'CLEAR_CACHE') {
+        this.clearCache();
+        sendResponse({ success: true });
+        return true;
+      }
+
+      // Validate sender has a valid tab for other message types
+      if (!sender.tab || !sender.tab.id) {
+        console.warn('PopFact: Message received without valid tab context');
+        return false;
+      }
+
       if (message.type === 'FACT_CHECK_REQUEST') {
         this.handleFactCheckRequest(message, sender.tab.id);
       } else if (message.type === 'MEDIA_DETECTED') {
         this.handleMediaDetection(message, sender.tab.id);
       }
+      return true; // Keep message channel open for async responses
     });
   }
 
   async handleFactCheckRequest(message, tabId) {
     const { claim, source, url, timestamp } = message;
 
+    // Validate inputs to prevent DoS
+    if (!claim || typeof claim !== 'string' || claim.length < 10 || claim.length > 1000) {
+      console.warn('PopFact: Invalid claim length');
+      return;
+    }
+    if (!source || typeof source !== 'string' || source.length > 50) {
+      console.warn('PopFact: Invalid source');
+      return;
+    }
+    if (!url || typeof url !== 'string' || url.length > 500) {
+      console.warn('PopFact: Invalid URL');
+      return;
+    }
+    if (!Number.isInteger(tabId) || tabId < 0) {
+      console.warn('PopFact: Invalid tabId');
+      return;
+    }
+
+    // Validate timestamp to prevent replay attacks
+    if (!timestamp || timestamp > Date.now() + 1000 || timestamp < Date.now() - 86400000) {
+      console.warn('PopFact: Invalid timestamp in request');
+      return;
+    }
+
     // Check cache first
     const cacheKey = this.getCacheKey(claim);
     if (this.cache.has(cacheKey)) {
       const cachedResult = this.cache.get(cacheKey);
       this.sendResultToTab(tabId, cachedResult);
+      return;
+    }
+
+    // Check rate limit before adding to queue
+    if (!this.checkRateLimit()) {
+      console.warn('PopFact: Rate limit exceeded, rejecting request');
+      this.sendResultToTab(tabId, {
+        claim: claim,
+        verdict: 'ERROR',
+        explanation: 'Rate limit exceeded. Please try again later.',
+        confidence: 0
+      });
+      return;
+    }
+
+    // Limit queue size to prevent DoS
+    if (this.queue.length >= 100) {
+      console.warn('PopFact: Queue full, rejecting request');
       return;
     }
 
@@ -54,8 +139,13 @@ class FactCheckService {
     try {
       const result = await this.performFactCheck(request.claim);
 
-      // Cache result
+      // Cache result with LRU eviction
       const cacheKey = this.getCacheKey(request.claim);
+      if (this.cache.size >= this.cacheMaxSize) {
+        // Remove oldest entry (first key in Map)
+        const firstKey = this.cache.keys().next().value;
+        this.cache.delete(firstKey);
+      }
       this.cache.set(cacheKey, result);
 
       // Send to tab

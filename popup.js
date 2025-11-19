@@ -7,23 +7,39 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function loadSettings() {
+  // Load non-sensitive settings from sync storage
   chrome.storage.sync.get({
     enableText: true,
     enableAudio: true,
     enableVideo: true,
     tickerSpeed: 'medium',
     confidenceThreshold: 50,
-    apiProvider: 'mock',
-    apiKey: ''
+    apiProvider: 'mock'
   }, (settings) => {
-    document.getElementById('enable-text').checked = settings.enableText;
-    document.getElementById('enable-audio').checked = settings.enableAudio;
-    document.getElementById('enable-video').checked = settings.enableVideo;
-    document.getElementById('ticker-speed').value = settings.tickerSpeed;
-    document.getElementById('confidence-threshold').value = settings.confidenceThreshold;
-    document.getElementById('confidence-value').textContent = settings.confidenceThreshold + '%';
-    document.getElementById('api-provider').value = settings.apiProvider;
-    document.getElementById('api-key').value = settings.apiKey;
+    // Validate and sanitize settings
+    const validatedSettings = {
+      enableText: Boolean(settings.enableText),
+      enableAudio: Boolean(settings.enableAudio),
+      enableVideo: Boolean(settings.enableVideo),
+      tickerSpeed: ['slow', 'medium', 'fast'].includes(settings.tickerSpeed) ? settings.tickerSpeed : 'medium',
+      confidenceThreshold: Math.max(0, Math.min(100, parseInt(settings.confidenceThreshold) || 50)),
+      apiProvider: ['mock', 'openai', 'claude', 'google', 'custom'].includes(settings.apiProvider) ? settings.apiProvider : 'mock'
+    };
+
+    document.getElementById('enable-text').checked = validatedSettings.enableText;
+    document.getElementById('enable-audio').checked = validatedSettings.enableAudio;
+    document.getElementById('enable-video').checked = validatedSettings.enableVideo;
+    document.getElementById('ticker-speed').value = validatedSettings.tickerSpeed;
+    document.getElementById('confidence-threshold').value = validatedSettings.confidenceThreshold;
+    document.getElementById('confidence-value').textContent = validatedSettings.confidenceThreshold + '%';
+    document.getElementById('api-provider').value = validatedSettings.apiProvider;
+  });
+
+  // Load sensitive API key from local storage (not synced)
+  chrome.storage.local.get({
+    apiKey: ''
+  }, (data) => {
+    document.getElementById('api-key').value = data.apiKey || '';
   });
 }
 
@@ -50,19 +66,36 @@ function setupEventListeners() {
 }
 
 function saveSettings() {
-  const settings = {
-    enableText: document.getElementById('enable-text').checked,
-    enableAudio: document.getElementById('enable-audio').checked,
-    enableVideo: document.getElementById('enable-video').checked,
-    tickerSpeed: document.getElementById('ticker-speed').value,
-    confidenceThreshold: parseInt(document.getElementById('confidence-threshold').value),
-    apiProvider: document.getElementById('api-provider').value,
-    apiKey: document.getElementById('api-key').value
+  // Get and validate all inputs to prevent DOM manipulation
+  const enableText = document.getElementById('enable-text').checked;
+  const enableAudio = document.getElementById('enable-audio').checked;
+  const enableVideo = document.getElementById('enable-video').checked;
+  const tickerSpeed = document.getElementById('ticker-speed').value;
+  const confidenceThreshold = parseInt(document.getElementById('confidence-threshold').value);
+  const apiProvider = document.getElementById('api-provider').value;
+  const apiKey = document.getElementById('api-key').value;
+
+  // Validate all values
+  const validatedSyncSettings = {
+    enableText: Boolean(enableText),
+    enableAudio: Boolean(enableAudio),
+    enableVideo: Boolean(enableVideo),
+    tickerSpeed: ['slow', 'medium', 'fast'].includes(tickerSpeed) ? tickerSpeed : 'medium',
+    confidenceThreshold: Math.max(0, Math.min(100, confidenceThreshold || 50)),
+    apiProvider: ['mock', 'openai', 'claude', 'google', 'custom'].includes(apiProvider) ? apiProvider : 'mock'
   };
 
-  chrome.storage.sync.set(settings, () => {
+  // Validate API key (max length)
+  const validatedLocalSettings = {
+    apiKey: typeof apiKey === 'string' && apiKey.length <= 500 ? apiKey : ''
+  };
+
+  // Save both
+  chrome.storage.sync.set(validatedSyncSettings);
+  chrome.storage.local.set(validatedLocalSettings, () => {
     // Show success feedback
     const btn = document.getElementById('save-settings');
+    if (!btn) return;
     const originalText = btn.textContent;
     btn.textContent = '✓ Saved!';
     btn.style.background = '#28a745';
