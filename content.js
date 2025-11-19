@@ -7,7 +7,10 @@ class PopFactOverlay {
     this.isVisible = true;
     this.factCheckQueue = [];
     this.processedClaims = new Set();
+    this.maxProcessedClaims = 1000; // Prevent unbounded memory growth
     this.observer = null;
+    this.mediaObserver = null;
+    this.extractDebounceTimer = null;
 
     this.init();
   }
@@ -29,6 +32,12 @@ class PopFactOverlay {
   }
 
   createOverlay() {
+    // Validate document.body exists
+    if (!document.body) {
+      console.error('PopFact: document.body not available');
+      return;
+    }
+
     // Create main overlay container
     this.overlay = document.createElement('div');
     this.overlay.id = 'popfact-overlay';
@@ -64,8 +73,11 @@ class PopFactOverlay {
   }
 
   toggleOverlay() {
+    if (!this.overlay) return;
+
     this.isVisible = !this.isVisible;
     const toggleBtn = document.getElementById('popfact-toggle');
+    if (!toggleBtn) return;
 
     if (this.isVisible) {
       this.overlay.classList.remove('hidden');
@@ -79,12 +91,20 @@ class PopFactOverlay {
   }
 
   monitorPageContent() {
+    if (!document.body) return;
+
     // Extract initial text content
     this.extractTextClaims();
 
-    // Watch for dynamic content changes
+    // Watch for dynamic content changes with debouncing
     this.observer = new MutationObserver((mutations) => {
-      this.extractTextClaims();
+      // Debounce to prevent performance issues and infinite loops
+      if (this.extractDebounceTimer) {
+        clearTimeout(this.extractDebounceTimer);
+      }
+      this.extractDebounceTimer = setTimeout(() => {
+        this.extractTextClaims();
+      }, 500);
     });
 
     this.observer.observe(document.body, {
@@ -95,6 +115,8 @@ class PopFactOverlay {
   }
 
   extractTextClaims() {
+    if (!document.body) return;
+
     // Extract declarative statements from page text
     const textNodes = this.getTextNodes(document.body);
     const sentences = this.extractSentences(textNodes);
@@ -102,7 +124,12 @@ class PopFactOverlay {
 
     // Send to background for fact-checking
     declarativeSentences.forEach(claim => {
-      if (!this.processedClaims.has(claim) && claim.length > 20) {
+      if (!this.processedClaims.has(claim) && claim.length > 20 && claim.length < 1000) {
+        // Implement LRU eviction for processedClaims Set
+        if (this.processedClaims.size >= this.maxProcessedClaims) {
+          const firstClaim = this.processedClaims.values().next().value;
+          this.processedClaims.delete(firstClaim);
+        }
         this.processedClaims.add(claim);
         this.sendForFactCheck(claim, 'text');
       }
@@ -188,6 +215,8 @@ class PopFactOverlay {
   }
 
   monitorMediaContent() {
+    if (!document.body) return;
+
     // Monitor video and audio elements
     const mediaElements = document.querySelectorAll('video, audio');
 
@@ -203,15 +232,17 @@ class PopFactOverlay {
       }
     });
 
-    // Watch for new media elements
-    const mediaObserver = new MutationObserver(() => {
-      this.monitorMediaContent();
-    });
+    // Watch for new media elements (only create once)
+    if (!this.mediaObserver) {
+      this.mediaObserver = new MutationObserver(() => {
+        this.monitorMediaContent();
+      });
 
-    mediaObserver.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
+      this.mediaObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    }
   }
 
   handleMediaPlayback(mediaElement) {
