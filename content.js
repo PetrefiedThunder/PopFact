@@ -237,11 +237,8 @@ class PopFactOverlay {
       allText += ' ' + el.textContent;
     });
 
-  monitorMediaContent() {
-    if (!document.body) return;
-
-    // Monitor video and audio elements
-    const mediaElements = document.querySelectorAll('video, audio');
+    // Split into sentences (basic split on period, question mark, exclamation)
+    const sentences = allText.split(/[.!?]+/);
 
     // Filter to sentences > 40 chars and > 6 words
     for (const sentence of sentences) {
@@ -251,6 +248,24 @@ class PopFactOverlay {
       if (trimmed.length > 40 && wordCount > 6) {
         claims.push(trimmed);
       }
+
+      // Limit to 5 claims max to avoid overwhelming the API
+      if (claims.length >= 5) break;
+    }
+
+    return claims;
+  }
+
+  monitorMediaContent() {
+    if (!document.body) return;
+
+    // Monitor video and audio elements
+    const mediaElements = document.querySelectorAll('video, audio');
+
+    // Log media elements found (future: transcription support)
+    if (mediaElements.length > 0) {
+      console.log(`PopFact: Found ${mediaElements.length} media elements (transcription coming soon)`);
+    }
 
     // Watch for new media elements (only create once)
     if (!this.mediaObserver) {
@@ -315,49 +330,49 @@ class PopFactOverlay {
       this.tickerInner.removeChild(this.tickerInner.firstChild);
     }
 
-    // Create fact check item using safe DOM methods to prevent XSS
-    const factItem = document.createElement('div');
-    factItem.className = `popfact-item ${category}`;
-
-    const icon = document.createElement('span');
-    icon.className = 'popfact-item-icon';
-    icon.textContent = this.getVerdictIcon(category);
-
-    const textContainer = document.createElement('span');
-    textContainer.className = 'popfact-item-text';
-
-    const claimSpan = document.createElement('span');
-    claimSpan.className = 'popfact-claim';
-    claimSpan.textContent = this.truncate(claim, 80);
-
-    const verdictSpan = document.createElement('span');
-    verdictSpan.className = 'popfact-verdict';
-    verdictSpan.textContent = explanation || verdict;
-
-    textContainer.appendChild(claimSpan);
-    textContainer.appendChild(verdictSpan);
-
-    const separator = document.createElement('span');
-    separator.className = 'popfact-separator';
-
-    factItem.appendChild(icon);
-    factItem.appendChild(textContainer);
-    factItem.appendChild(separator);
-
-    // Add to ticker
-    this.addToTicker(factItem);
-  }
-
+    // Process each fact-check result
+    this.factResults.forEach(result => {
+      const { claim, verdict, explanation } = result;
+      
       // Determine CSS class based on verdict
       let verdictClass = 'popfact-unverified';
       if (verdict === 'TRUE') verdictClass = 'popfact-true';
       else if (verdict === 'FALSE') verdictClass = 'popfact-false';
       else if (verdict === 'MIXED') verdictClass = 'popfact-mixed';
 
-      // Truncate claim to max 120 chars
-      const truncatedClaim = claim.length > 120
-        ? claim.substring(0, 117) + '…'
-        : claim;
+      // Create fact check item using safe DOM methods to prevent XSS
+      const factItem = document.createElement('div');
+      factItem.className = `popfact-item ${verdictClass}`;
+
+      const icon = document.createElement('span');
+      icon.className = 'popfact-item-icon';
+      icon.textContent = this.getVerdictIcon(verdict);
+
+      const textContainer = document.createElement('span');
+      textContainer.className = 'popfact-item-text';
+
+      const claimSpan = document.createElement('span');
+      claimSpan.className = 'popfact-claim';
+      claimSpan.textContent = this.truncate(claim, 80);
+
+      const verdictSpan = document.createElement('span');
+      verdictSpan.className = 'popfact-verdict';
+      verdictSpan.textContent = explanation || verdict;
+
+      textContainer.appendChild(claimSpan);
+      textContainer.appendChild(verdictSpan);
+
+      const separator = document.createElement('span');
+      separator.className = 'popfact-separator';
+
+      factItem.appendChild(icon);
+      factItem.appendChild(textContainer);
+      factItem.appendChild(separator);
+
+      // Add to ticker
+      this.addToTicker(factItem);
+    });
+  }
 
   addToTicker(factItem) {
     // Remove loading message if present (with null check)

@@ -424,7 +424,6 @@ class OpenKnowledgeProvider {
       url: `https://twitter.com/search?q=${encodeURIComponent(claim)}`
     };
   }
-});
 
   deriveVerdict(wikiResult, twitterResult) {
     if (wikiResult?.snippet && /hoax|false|misinformation|debunked/i.test(wikiResult.snippet)) {
@@ -459,6 +458,6 @@ class OpenKnowledgeProvider {
     if (twitterResult?.snippet) base += 0.1;
     return Math.min(1, Math.max(0, base + threshold / 500));
   }
-});
+}
 
 console.log('PopFact Background Service: Initialized (Mock Mode)');
