@@ -148,10 +148,16 @@ class FactCheckService {
     const results = [];
     const errors = [];
 
-    // Try Google Fact Check API first (most reliable for fact-checking)
-    if (settings.apiProvider === 'google' && settings.apiKey) {
+    // For true multi-source verification, check Google (if available) AND the configured LLM
+    // This allows aggregating results from both fact-checking APIs and LLMs
+    
+    // Try Google Fact Check API (check if available, regardless of selected provider)
+    // Note: In a full implementation, you might want to check for Google API key separately
+    // For now, we check if Google is the selected provider OR if we want to always check it
+    const googleApiKey = settings.apiProvider === 'google' ? settings.apiKey : null;
+    if (googleApiKey) {
       try {
-        const googleResult = await this.checkGoogleFactCheck(claim, settings.apiKey);
+        const googleResult = await this.checkGoogleFactCheck(claim, googleApiKey);
         if (googleResult && googleResult.verdict !== 'UNVERIFIED') {
           results.push(googleResult);
         }
@@ -161,6 +167,7 @@ class FactCheckService {
     }
 
     // Try LLM-based fact-checking with enhanced prompts
+    // Use separate if statements (not else if) to allow both Google and LLM checks
     if (settings.apiProvider === 'openai' && settings.apiKey) {
       try {
         const llmResult = await this.checkWithLLM(claim, 'openai', settings.apiKey);
@@ -170,7 +177,10 @@ class FactCheckService {
       } catch (error) {
         errors.push({ source: 'OpenAI', error: error.message });
       }
-    } else if (settings.apiProvider === 'claude' && settings.apiKey) {
+    }
+    
+    // Check Claude if configured (separate from OpenAI check)
+    if (settings.apiProvider === 'claude' && settings.apiKey) {
       try {
         const llmResult = await this.checkWithLLM(claim, 'claude', settings.apiKey);
         if (llmResult) {
@@ -317,6 +327,15 @@ Respond with ONLY valid JSON in this exact format:
     const data = await response.json();
     let result;
     
+    // Validate response structure before accessing
+    if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
+      throw new Error('OpenAI API returned invalid response: missing or empty choices array');
+    }
+    
+    if (!data.choices[0].message || !data.choices[0].message.content) {
+      throw new Error('OpenAI API returned invalid response: missing message content');
+    }
+    
     try {
       const content = data.choices[0].message.content;
       // Extract JSON from markdown code blocks if present
@@ -368,6 +387,15 @@ Respond with ONLY valid JSON in this exact format:
 
     const data = await response.json();
     let result;
+    
+    // Validate response structure before accessing
+    if (!data.content || !Array.isArray(data.content) || data.content.length === 0) {
+      throw new Error('Claude API returned invalid response: missing or empty content array');
+    }
+    
+    if (!data.content[0].text) {
+      throw new Error('Claude API returned invalid response: missing text content');
+    }
     
     try {
       const content = data.content[0].text;

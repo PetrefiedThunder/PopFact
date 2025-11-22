@@ -343,7 +343,8 @@ class PopFactOverlay {
           <strong>Sources (${result.sourceDetails.length}):</strong>
           <ul>
             ${result.sourceDetails.map(source => {
-              const escapedUrl = this.escapeHtml(source.url || '');
+              const validatedUrl = this.validateUrl(source.url || '');
+              const escapedUrl = this.escapeHtml(validatedUrl);
               const escapedName = this.escapeHtml(source.name || 'Unknown Source');
               const escapedType = this.escapeHtml(source.type || 'unknown');
               const sourceCredibility = Math.round((source.credibility || 0.5) * 100);
@@ -419,6 +420,48 @@ class PopFactOverlay {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  validateUrl(url) {
+    if (!url || typeof url !== 'string') {
+      return '#';
+    }
+    
+    // Trim whitespace
+    url = url.trim();
+    
+    // Check for safe protocols
+    const safeProtocols = ['http:', 'https:', 'mailto:'];
+    const urlLower = url.toLowerCase();
+    
+    // Check if URL starts with a protocol
+    const hasProtocol = /^[a-z][a-z0-9+.-]*:/.test(urlLower);
+    
+    if (hasProtocol) {
+      // Extract protocol
+      const protocol = urlLower.split(':')[0] + ':';
+      
+      // Only allow safe protocols
+      if (!safeProtocols.includes(protocol)) {
+        // Block dangerous protocols (javascript:, data:, vbscript:, etc.)
+        console.warn('PopFact: Blocked unsafe URL protocol:', protocol);
+        return '#';
+      }
+    } else {
+      // If no protocol, assume relative URL or add https://
+      // For external links, we should have a protocol, so treat as invalid
+      // For relative URLs, they're safe, but we'll be conservative
+      if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../')) {
+        // Relative URLs are generally safe
+        return url;
+      } else {
+        // No protocol and not relative - could be malicious, block it
+        console.warn('PopFact: Blocked URL without safe protocol:', url);
+        return '#';
+      }
+    }
+    
+    return url;
   }
 
   getVerdictIcon(category) {
