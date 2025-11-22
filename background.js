@@ -31,29 +31,109 @@ const ACADEMIC_DOMAINS = [
   'jstor.org', 'springer.com', 'elsevier.com', 'ieee.org'
 ];
 
+
 class FactCheckService {
   constructor() {
     this.cache = new Map();
+    this.cacheMaxSize = 1000; // Prevent unbounded cache growth
     this.queue = [];
     this.processing = false;
     this.trustedSources = TRUSTED_SOURCES;
     this.sourceCache = new Map(); // Cache source credibility lookups
 
+    // Rate limiting: token bucket algorithm
+    this.rateLimitTokens = 60; // 60 requests
+    this.rateLimitMax = 60;
+    this.rateLimitRefillRate = 1; // 1 token per second (60 req/min)
+    this.lastRefill = Date.now();
+
+    this.settings = {
+      apiProvider: 'open-knowledge',
+      apiKey: '',
+      confidenceThreshold: 50
+    };
+
+    this.providers = {
+      'open-knowledge': new OpenKnowledgeProvider(),
+      'mock': new MockProvider()
+    };
+
     this.setupMessageListener();
-    this.loadUserSettings();
-    console.log('PopFact Background Service: Initialized with multi-source verification');
+    this.setupRateLimitRefill();
+    this.loadSettings();
+    console.log('PopFact Background Service: Initialized');
   }
 
-  async loadUserSettings() {
-    const settings = await chrome.storage.sync.get(['trustedSourcesOnly', 'minSourceCredibility']);
-    this.trustedSourcesOnly = settings.trustedSourcesOnly || false;
-    // Convert from 0-100 range (popup slider) to 0.0-1.0 range (credibility scores)
-    const rawThreshold = settings.minSourceCredibility || 70;
-    this.minSourceCredibility = typeof rawThreshold === 'number' ? rawThreshold / 100 : 0.7;
+  loadSettings() {
+    chrome.storage.sync.get({
+      apiProvider: 'open-knowledge',
+      confidenceThreshold: 50
+    }, (data) => {
+      if (data && typeof data === 'object') {
+        this.settings.apiProvider = data.apiProvider || 'open-knowledge';
+        this.settings.confidenceThreshold = Number.isFinite(data.confidenceThreshold)
+          ? data.confidenceThreshold
+          : 50;
+      }
+    });
+
+    chrome.storage.local.get({ apiKey: '' }, (data) => {
+      if (data && typeof data.apiKey === 'string') {
+        this.settings.apiKey = data.apiKey;
+      }
+    });
+
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName === 'sync') {
+        if (changes.apiProvider) {
+          this.settings.apiProvider = changes.apiProvider.newValue || 'open-knowledge';
+        }
+        if (changes.confidenceThreshold) {
+          this.settings.confidenceThreshold = changes.confidenceThreshold.newValue;
+        }
+      }
+      if (areaName === 'local' && changes.apiKey) {
+        this.settings.apiKey = changes.apiKey.newValue;
+      }
+    });
+  }
+
+  setupRateLimitRefill() {
+    // Refill tokens every second
+    setInterval(() => {
+      const now = Date.now();
+      const timePassed = (now - this.lastRefill) / 1000;
+      this.rateLimitTokens = Math.min(
+        this.rateLimitMax,
+        this.rateLimitTokens + timePassed * this.rateLimitRefillRate
+      );
+      this.lastRefill = now;
+    }, 1000);
+  }
+
+  checkRateLimit() {
+    if (this.rateLimitTokens >= 1) {
+      this.rateLimitTokens -= 1;
+      return true;
+    }
+    return false;
   }
 
   setupMessageListener() {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      // Handle CLEAR_CACHE from popup (no tab context needed)
+      if (message.type === 'CLEAR_CACHE') {
+        this.clearCache();
+        sendResponse({ success: true });
+        return true;
+      }
+
+      // Validate sender has a valid tab for other message types
+      if (!sender.tab || !sender.tab.id) {
+        console.warn('PopFact: Message received without valid tab context');
+        return false;
+      }
+
       if (message.type === 'FACT_CHECK_REQUEST') {
         this.handleFactCheckRequest(message, sender.tab.id);
         return true; // Keep channel open for async response
@@ -66,18 +146,69 @@ class FactCheckService {
         this.loadUserSettings();
         sendResponse({ success: true });
       }
-      return true;
+      return true; // Keep message channel open for async responses
     });
   }
 
   async handleFactCheckRequest(message, tabId) {
     const { claim, source, url, timestamp } = message;
 
+    // Validate inputs to prevent DoS
+    if (!claim || typeof claim !== 'string' || claim.length < 10 || claim.length > 1000) {
+      console.warn('PopFact: Invalid claim length');
+      return;
+    }
+    if (!source || typeof source !== 'string' || source.length > 50) {
+      console.warn('PopFact: Invalid source');
+      return;
+    }
+    if (!url || typeof url !== 'string' || url.length > 500) {
+      console.warn('PopFact: Invalid URL');
+      return;
+    }
+    if (!Number.isInteger(tabId) || tabId < 0) {
+      console.warn('PopFact: Invalid tabId');
+      return;
+    }
+
+    // Validate timestamp to prevent replay attacks
+    if (!timestamp || timestamp > Date.now() + 1000 || timestamp < Date.now() - 86400000) {
+      console.warn('PopFact: Invalid timestamp in request');
+      return;
+    }
+
     // Check cache first
     const cacheKey = this.getCacheKey(claim);
     if (this.cache.has(cacheKey)) {
       const cachedResult = this.cache.get(cacheKey);
-      this.sendResultToTab(tabId, cachedResult);
+      const enrichedResult = {
+        ...cachedResult,
+        claim,
+        sourceType: source,
+        url,
+        provider: this.settings.apiProvider,
+        timestamp: Date.now()
+      };
+      this.recordFactCheck(enrichedResult);
+      this.sendResultToTab(tabId, enrichedResult);
+      return;
+    }
+
+    // Check rate limit before adding to queue
+    if (!this.checkRateLimit()) {
+      console.warn('PopFact: Rate limit exceeded, rejecting request');
+      this.sendResultToTab(tabId, {
+        claim: claim,
+        verdict: 'ERROR',
+        explanation: 'Rate limit exceeded. Please try again later.',
+        confidence: 0
+      });
+      return;
+    }
+
+    // Limit queue size to prevent DoS
+    if (this.queue.length >= 100) {
+      console.warn('PopFact: Queue full, rejecting request');
       return;
     }
 
@@ -100,14 +231,33 @@ class FactCheckService {
     const request = this.queue.shift();
 
     try {
-      const result = await this.performFactCheck(request.claim);
+      const result = await this.performFactCheck(request.claim, {
+        source: request.source,
+        url: request.url
+      });
 
-      // Cache result
+      // Cache result with LRU eviction
       const cacheKey = this.getCacheKey(request.claim);
-      this.cache.set(cacheKey, result);
+      if (this.cache.size >= this.cacheMaxSize) {
+        // Remove oldest entry (first key in Map)
+        const firstKey = this.cache.keys().next().value;
+        this.cache.delete(firstKey);
+      }
+      this.cache.set(cacheKey, enrichedResult);
 
-      // Send to tab
-      this.sendResultToTab(request.tabId, result);
+      // Enrich result with request metadata and active provider
+      const enrichedResult = {
+        ...result,
+        claim: request.claim,
+        sourceType: request.source,
+        url: request.url,
+        provider: this.settings.apiProvider,
+        timestamp: Date.now()
+      };
+
+      // Persist log and send to tab
+      this.recordFactCheck(enrichedResult);
+      this.sendResultToTab(request.tabId, enrichedResult);
 
       // Continue processing with delay to avoid rate limiting
       setTimeout(() => this.processQueue(), 1000);
@@ -126,599 +276,37 @@ class FactCheckService {
     }
   }
 
-  async performFactCheck(claim) {
-    const settings = await chrome.storage.sync.get(['apiProvider', 'apiKey', 'useMultiSource']);
-    const useMultiSource = settings.useMultiSource !== false; // Default to true
+  async performFactCheck(claim, context = {}) {
+    const providerKey = this.settings.apiProvider || 'open-knowledge';
+    const provider = this.providers[providerKey] || this.providers['open-knowledge'];
 
     try {
-      if (useMultiSource) {
-        // Multi-source verification for higher accuracy
-        return await this.performMultiSourceCheck(claim, settings);
-      } else {
-        // Single source check
-        return await this.performSingleSourceCheck(claim, settings);
-      }
-    } catch (error) {
-      console.error('PopFact: Fact check error:', error);
-      throw new Error(`Fact check failed: ${error.message}`);
-    }
-  }
-
-  async performMultiSourceCheck(claim, settings) {
-    const results = [];
-    const errors = [];
-
-    // For true multi-source verification, check Google (if available) AND the configured LLM
-    // This allows aggregating results from both fact-checking APIs and LLMs
-    
-    // Try Google Fact Check API (check if available, regardless of selected provider)
-    // Note: In a full implementation, you might want to check for Google API key separately
-    // For now, we check if Google is the selected provider OR if we want to always check it
-    const googleApiKey = settings.apiProvider === 'google' ? settings.apiKey : null;
-    if (googleApiKey) {
-      try {
-        const googleResult = await this.checkGoogleFactCheck(claim, googleApiKey);
-        if (googleResult && googleResult.verdict !== 'UNVERIFIED') {
-          results.push(googleResult);
-        }
-      } catch (error) {
-        errors.push({ source: 'Google Fact Check', error: error.message });
-      }
-    }
-
-    // Try LLM-based fact-checking with enhanced prompts
-    // Use separate if statements (not else if) to allow both Google and LLM checks
-    if (settings.apiProvider === 'openai' && settings.apiKey) {
-      try {
-        const llmResult = await this.checkWithLLM(claim, 'openai', settings.apiKey);
-        if (llmResult) {
-          results.push(llmResult);
-        }
-      } catch (error) {
-        errors.push({ source: 'OpenAI', error: error.message });
-      }
-    }
-    
-    // Check Claude if configured (separate from OpenAI check)
-    if (settings.apiProvider === 'claude' && settings.apiKey) {
-      try {
-        const llmResult = await this.checkWithLLM(claim, 'claude', settings.apiKey);
-        if (llmResult) {
-          results.push(llmResult);
-        }
-      } catch (error) {
-        errors.push({ source: 'Claude', error: error.message });
-      }
-    }
-
-    // If no results and no errors (no APIs configured), fall back to mock
-    if (results.length === 0 && errors.length === 0) {
-      // Fallback to mock for demo when no APIs are configured
-      const mockResult = await this.mockFactCheck(claim);
-      results.push(mockResult);
-    }
-
-    // Aggregate results
-    return this.aggregateResults(claim, results, errors);
-  }
-
-  async performSingleSourceCheck(claim, settings) {
-    if (settings.apiProvider === 'google' && settings.apiKey) {
-      return await this.checkGoogleFactCheck(claim, settings.apiKey);
-    } else if (settings.apiProvider === 'openai' && settings.apiKey) {
-      return await this.checkWithLLM(claim, 'openai', settings.apiKey);
-    } else if (settings.apiProvider === 'claude' && settings.apiKey) {
-      return await this.checkWithLLM(claim, 'claude', settings.apiKey);
-    } else {
-      // Fallback to mock for demo
-      return await this.mockFactCheck(claim);
-    }
-  }
-
-  async checkGoogleFactCheck(claim, apiKey) {
-    const url = new URL('https://factchecktools.googleapis.com/v1alpha1/claims:search');
-    url.searchParams.append('query', claim);
-    url.searchParams.append('key', apiKey);
-    url.searchParams.append('languageCode', 'en');
-
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`Google API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-
-    if (!data.claims || data.claims.length === 0) {
-      return {
-        claim: claim,
-        verdict: 'UNVERIFIED',
-        explanation: 'No fact-checks found for this claim',
-        confidence: 0,
-        sources: [],
-        sourceDetails: [],
-        timestamp: Date.now()
-      };
-    }
-
-    // Process multiple claim reviews and aggregate
-    const reviews = [];
-    for (const claimData of data.claims.slice(0, 5)) { // Limit to top 5
-      if (claimData.claimReview && claimData.claimReview.length > 0) {
-        for (const review of claimData.claimReview) {
-          const sourceUrl = review.url || '';
-          const sourceCredibility = this.getSourceCredibility(sourceUrl);
-          
-          reviews.push({
-            verdict: this.parseTextualRating(review.textualRating),
-            explanation: review.textualRating,
-            sourceUrl: sourceUrl,
-            sourceName: review.publisher?.name || this.extractDomainName(sourceUrl),
-            sourceCredibility: sourceCredibility.credibility,
-            publisher: review.publisher
-          });
-        }
-      }
-    }
-
-    // Aggregate reviews
-    return this.aggregateGoogleReviews(claim, reviews);
-  }
-
-  async checkWithLLM(claim, provider, apiKey) {
-    const enhancedPrompt = this.buildEnhancedFactCheckPrompt(claim);
-    
-    if (provider === 'openai') {
-      return await this.checkWithOpenAI(claim, enhancedPrompt, apiKey);
-    } else if (provider === 'claude') {
-      return await this.checkWithClaude(claim, enhancedPrompt, apiKey);
-    }
-  }
-
-  buildEnhancedFactCheckPrompt(claim) {
-    return `You are an expert fact-checker. Analyze the following claim and provide a fact-check with citations from reputable sources.
-
-CRITICAL REQUIREMENTS:
-1. Only cite sources from reputable fact-checking organizations (PolitiFact, FactCheck.org, Snopes, Full Fact), established news organizations (AP, Reuters, BBC, NYT, WaPo), peer-reviewed academic sources, or government agencies (CDC, NIH, WHO, NASA, NOAA)
-2. If you cannot find reputable sources, respond with UNVERIFIED
-3. Provide specific URLs or citations when possible
-4. Base your verdict on evidence from these trusted sources only
-
-Claim to fact-check: "${claim}"
-
-Respond with ONLY valid JSON in this exact format:
-{
-  "verdict": "TRUE" | "FALSE" | "MIXED" | "UNVERIFIED",
-  "explanation": "Brief explanation (max 150 chars) with source attribution",
-  "confidence": 0.0 to 1.0,
-  "sources": [
-    {
-      "url": "source URL",
-      "name": "source name",
-      "type": "fact-checker" | "news" | "academic" | "government"
-    }
-  ],
-  "reasoning": "Brief explanation of why this verdict was reached based on the sources"
-}`;
-  }
-
-  async checkWithOpenAI(claim, prompt, apiKey) {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4-turbo-preview',
-        messages: [
-          {
-            role: 'system',
-            content: prompt
-          },
-          {
-            role: 'user',
-            content: `Fact-check this claim: "${claim}"`
-          }
-        ],
-        temperature: 0.2, // Lower temperature for more consistent, factual responses
-        max_tokens: 500
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(`OpenAI API error: ${response.statusText} - ${JSON.stringify(errorData)}`);
-    }
-
-    const data = await response.json();
-    let result;
-    
-    // Validate response structure before accessing
-    if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
-      throw new Error('OpenAI API returned invalid response: missing or empty choices array');
-    }
-    
-    if (!data.choices[0].message || !data.choices[0].message.content) {
-      throw new Error('OpenAI API returned invalid response: missing message content');
-    }
-    
-    try {
-      const content = data.choices[0].message.content;
-      // Extract JSON from markdown code blocks if present
-      const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || content.match(/\{[\s\S]*\}/);
-      const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : content;
-      result = JSON.parse(jsonStr);
-    } catch (parseError) {
-      console.error('Failed to parse OpenAI response:', data.choices[0].message.content);
-      throw new Error('Invalid response format from OpenAI');
-    }
-
-    // Validate and enhance sources
-    const validatedSources = this.validateAndEnhanceSources(result.sources || []);
-
-    return {
-      claim: claim,
-      verdict: result.verdict || 'UNVERIFIED',
-      explanation: result.explanation || result.reasoning || 'Analysis completed',
-      confidence: result.confidence || 0.5,
-      sources: validatedSources.map(s => s.url),
-      sourceDetails: validatedSources,
-      timestamp: Date.now()
-    };
-  }
-
-  async checkWithClaude(claim, prompt, apiKey) {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-3-opus-20240229',
-        max_tokens: 500,
-        temperature: 0.2,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(`Claude API error: ${response.statusText} - ${JSON.stringify(errorData)}`);
-    }
-
-    const data = await response.json();
-    let result;
-    
-    // Validate response structure before accessing
-    if (!data.content || !Array.isArray(data.content) || data.content.length === 0) {
-      throw new Error('Claude API returned invalid response: missing or empty content array');
-    }
-    
-    if (!data.content[0].text) {
-      throw new Error('Claude API returned invalid response: missing text content');
-    }
-    
-    try {
-      const content = data.content[0].text;
-      const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || content.match(/\{[\s\S]*\}/);
-      const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : content;
-      result = JSON.parse(jsonStr);
-    } catch (parseError) {
-      console.error('Failed to parse Claude response:', data.content[0].text);
-      throw new Error('Invalid response format from Claude');
-    }
-
-    const validatedSources = this.validateAndEnhanceSources(result.sources || []);
-
-    return {
-      claim: claim,
-      verdict: result.verdict || 'UNVERIFIED',
-      explanation: result.explanation || result.reasoning || 'Analysis completed',
-      confidence: result.confidence || 0.5,
-      sources: validatedSources.map(s => s.url),
-      sourceDetails: validatedSources,
-      timestamp: Date.now()
-    };
-  }
-
-  validateAndEnhanceSources(sources) {
-    return sources.map(source => {
-      const url = typeof source === 'string' ? source : (source.url || '');
-      const sourceInfo = this.getSourceCredibility(url);
-      
-      return {
-        url: url,
-        name: typeof source === 'object' ? (source.name || sourceInfo.name) : sourceInfo.name,
-        type: typeof source === 'object' ? (source.type || sourceInfo.type) : sourceInfo.type,
-        credibility: sourceInfo.credibility
-      };
-    }).filter(source => {
-      // Filter sources based on minimum credibility threshold (applies independently)
-      // The minSourceCredibility setting should always be respected when set
-      if (source.credibility < this.minSourceCredibility) {
-        return false;
-      }
-      
-      // Additionally, if trustedSourcesOnly is enabled, filter to only trusted source types
-      if (this.trustedSourcesOnly) {
-        const trustedTypes = ['fact-checker', 'news', 'academic', 'government'];
-        if (!trustedTypes.includes(source.type)) {
-          return false;
-        }
-      }
-      
-      return source.url && source.url.length > 0;
-    });
-  }
-
-  getSourceCredibility(url) {
-    if (!url) {
-      return { name: 'Unknown', credibility: 0.5, type: 'unknown' };
-    }
-
-    // Check cache first
-    if (this.sourceCache.has(url)) {
-      return this.sourceCache.get(url);
-    }
-
-    try {
-      const urlObj = new URL(url);
-      const hostname = urlObj.hostname.toLowerCase();
-      
-      // Check exact matches
-      for (const [domain, info] of Object.entries(this.trustedSources)) {
-        if (hostname.includes(domain)) {
-          this.sourceCache.set(url, info);
-          return info;
-        }
-      }
-
-      // Check academic domains
-      const isAcademic = ACADEMIC_DOMAINS.some(domain => hostname.includes(domain));
-      if (isAcademic) {
-        const academicInfo = { name: this.extractDomainName(hostname), credibility: 0.85, type: 'academic' };
-        this.sourceCache.set(url, academicInfo);
-        return academicInfo;
-      }
-
-      // Check for .gov domains
-      if (hostname.endsWith('.gov') || hostname.endsWith('.gov.uk')) {
-        const govInfo = { name: this.extractDomainName(hostname), credibility: 0.90, type: 'government' };
-        this.sourceCache.set(url, govInfo);
-        return govInfo;
-      }
-
-      // Default for unknown sources
-      const defaultInfo = { name: this.extractDomainName(hostname), credibility: 0.5, type: 'unknown' };
-      this.sourceCache.set(url, defaultInfo);
-      return defaultInfo;
-    } catch (error) {
-      return { name: 'Unknown', credibility: 0.5, type: 'unknown' };
-    }
-  }
-
-  extractDomainName(hostname) {
-    const parts = hostname.split('.');
-    if (parts.length >= 2) {
-      return parts[parts.length - 2].charAt(0).toUpperCase() + parts[parts.length - 2].slice(1);
-    }
-    return hostname;
-  }
-
-  parseTextualRating(rating) {
-    // Handle null, undefined, or empty rating
-    if (!rating || typeof rating !== 'string') {
-      return 'UNVERIFIED';
-    }
-    
-    const upper = rating.toUpperCase();
-    if (upper.includes('TRUE') || upper.includes('CORRECT') || upper.includes('ACCURATE')) {
-      return 'TRUE';
-    } else if (upper.includes('FALSE') || upper.includes('INCORRECT') || upper.includes('INACCURATE')) {
-      return 'FALSE';
-    } else if (upper.includes('MIXED') || upper.includes('PARTLY') || upper.includes('MISLEADING')) {
-      return 'MIXED';
-    }
-    return 'UNVERIFIED';
-  }
-
-  aggregateGoogleReviews(claim, reviews) {
-    if (reviews.length === 0) {
-      return {
-        claim: claim,
-        verdict: 'UNVERIFIED',
-        explanation: 'No fact-checks found',
-        confidence: 0,
-        sources: [],
-        sourceDetails: [],
-        timestamp: Date.now()
-      };
-    }
-
-    // Count verdicts, weighted by source credibility
-    const verdictScores = { TRUE: 0, FALSE: 0, MIXED: 0, UNVERIFIED: 0 };
-    let totalWeight = 0;
-    const allSources = [];
-
-    reviews.forEach(review => {
-      const weight = review.sourceCredibility || 0.5;
-      verdictScores[review.verdict] += weight;
-      totalWeight += weight;
-      allSources.push({
-        url: review.sourceUrl,
-        name: review.sourceName,
-        type: 'fact-checker',
-        credibility: review.sourceCredibility,
-        verdict: review.verdict,
-        explanation: review.explanation
+      const result = await provider.check(claim, {
+        apiKey: this.settings.apiKey,
+        confidenceThreshold: this.settings.confidenceThreshold,
+        source: context.source,
+        url: context.url
       });
-    });
 
-    // Determine consensus verdict
-    let verdict = 'UNVERIFIED';
-    let confidence = 0.5;
-    
-    const trueScore = verdictScores.TRUE / totalWeight;
-    const falseScore = verdictScores.FALSE / totalWeight;
-    const mixedScore = verdictScores.MIXED / totalWeight;
-
-    if (trueScore > 0.6) {
-      verdict = 'TRUE';
-      confidence = Math.min(0.95, trueScore);
-    } else if (falseScore > 0.6) {
-      verdict = 'FALSE';
-      confidence = Math.min(0.95, falseScore);
-    } else if (mixedScore > 0.4 || (trueScore > 0.3 && falseScore > 0.3)) {
-      verdict = 'MIXED';
-      confidence = 0.7;
-    } else {
-      verdict = 'UNVERIFIED';
-      confidence = Math.max(trueScore, falseScore, mixedScore);
-    }
-
-    // Get most common explanation
-    const explanations = reviews
-      .filter(r => r.verdict === verdict)
-      .map(r => r.explanation);
-    const explanation = explanations[0] || 'Multiple sources reviewed';
-
-    return {
-      claim: claim,
-      verdict: verdict,
-      explanation: explanation,
-      confidence: confidence,
-      sources: [...new Set(allSources.map(s => s.url))],
-      sourceDetails: allSources,
-      consensus: {
-        trueScore: trueScore,
-        falseScore: falseScore,
-        mixedScore: mixedScore,
-        reviewCount: reviews.length
-      },
-      timestamp: Date.now()
-    };
-  }
-
-  aggregateResults(claim, results, errors) {
-    if (results.length === 0) {
       return {
-        claim: claim,
-        verdict: 'UNVERIFIED',
-        explanation: 'Unable to verify from available sources',
+        claim,
+        verdict: result.verdict,
+        explanation: result.explanation,
+        confidence: result.confidence,
+        sources: result.sources || [],
+        timestamp: Date.now()
+      };
+    } catch (error) {
+      console.error('PopFact: Provider failure', error);
+      return {
+        claim,
+        verdict: 'ERROR',
+        explanation: 'Unable to verify claim at this time',
         confidence: 0,
         sources: [],
-        sourceDetails: [],
-        errors: errors,
         timestamp: Date.now()
       };
     }
-
-    // If we have Google Fact Check results, prioritize them
-    const googleResult = results.find(r => r.sourceDetails && r.sourceDetails.some(s => s.type === 'fact-checker'));
-    if (googleResult) {
-      return googleResult;
-    }
-
-    // Otherwise, aggregate LLM results
-    const verdictCounts = { TRUE: 0, FALSE: 0, MIXED: 0, UNVERIFIED: 0 };
-    const allSources = [];
-    let totalConfidence = 0;
-
-    results.forEach(result => {
-      verdictCounts[result.verdict] = (verdictCounts[result.verdict] || 0) + 1;
-      totalConfidence += result.confidence || 0;
-      if (result.sourceDetails) {
-        allSources.push(...result.sourceDetails);
-      } else if (result.sources) {
-        result.sources.forEach(url => {
-          const sourceInfo = this.getSourceCredibility(url);
-          allSources.push({
-            url: url,
-            name: sourceInfo.name,
-            type: sourceInfo.type,
-            credibility: sourceInfo.credibility
-          });
-        });
-      }
-    });
-
-    // Determine consensus
-    const maxCount = Math.max(...Object.values(verdictCounts));
-    const consensusVerdict = Object.keys(verdictCounts).find(v => verdictCounts[v] === maxCount);
-    const avgConfidence = totalConfidence / results.length;
-
-    // Get explanation from highest confidence result
-    const bestResult = results.reduce((best, current) => 
-      (current.confidence || 0) > (best.confidence || 0) ? current : best
-    );
-
-    return {
-      claim: claim,
-      verdict: consensusVerdict || 'UNVERIFIED',
-      explanation: bestResult.explanation || 'Verified by multiple sources',
-      confidence: avgConfidence,
-      sources: [...new Set(allSources.map(s => s.url))],
-      sourceDetails: allSources,
-      consensus: {
-        reviewCount: results.length,
-        verdictDistribution: verdictCounts
-      },
-      errors: errors.length > 0 ? errors : undefined,
-      timestamp: Date.now()
-    };
-  }
-
-  async mockFactCheck(claim) {
-    // Mock implementation for demonstration only
-    // In production, use real API integrations
-
-    const lowerClaim = claim.toLowerCase();
-
-    const patterns = {
-      'true': ['sky is blue', 'earth is round', 'water boils at 100'],
-      'false': ['earth is flat', 'vaccines cause autism', 'moon landing was fake'],
-      'mixed': ['coffee is healthy', 'carbs are bad']
-    };
-
-    let verdict = 'UNVERIFIED';
-    let confidence = 0.5;
-
-    for (const [category, keywords] of Object.entries(patterns)) {
-      for (const keyword of keywords) {
-        if (lowerClaim.includes(keyword)) {
-          verdict = category.toUpperCase();
-          confidence = category === 'true' ? 0.9 : category === 'false' ? 0.1 : 0.5;
-          break;
-        }
-      }
-    }
-
-    return {
-      claim: claim,
-      verdict: verdict,
-      explanation: this.generateExplanation(claim, verdict),
-      confidence: confidence,
-      sources: [],
-      sourceDetails: [],
-      timestamp: Date.now()
-    };
-  }
-
-  generateExplanation(claim, verdict) {
-    const explanations = {
-      'TRUE': 'This claim is supported by reliable sources',
-      'FALSE': 'This claim contradicts established facts',
-      'MIXED': 'This claim contains both accurate and inaccurate elements',
-      'UNVERIFIED': 'Insufficient evidence to verify this claim'
-    };
-
-    return explanations[verdict] || 'Verification pending';
   }
 
   handleMediaDetection(message, tabId) {
@@ -741,6 +329,31 @@ Respond with ONLY valid JSON in this exact format:
     return claim.toLowerCase().trim().replace(/\s+/g, ' ');
   }
 
+  recordFactCheck(result) {
+    chrome.storage.local.get({ factCheckLog: [], claimsChecked: 0 }, (data) => {
+      const newEntry = {
+        claim: result.claim,
+        verdict: result.verdict,
+        explanation: result.explanation,
+        confidence: result.confidence,
+        sources: result.sources || [],
+        provider: result.provider,
+        url: result.url,
+        sourceType: result.sourceType,
+        timestamp: result.timestamp
+      };
+
+      const updatedLog = [newEntry, ...(data.factCheckLog || [])].slice(0, 200);
+      const updatedCount = (data.claimsChecked || 0) + 1;
+
+      chrome.storage.local.set({
+        factCheckLog: updatedLog,
+        claimsChecked: updatedCount,
+        lastUpdated: Date.now()
+      });
+    });
+  }
+
   sendResultToTab(tabId, result) {
     chrome.tabs.sendMessage(tabId, {
       type: 'FACT_CHECK_RESULT',
@@ -755,17 +368,145 @@ Respond with ONLY valid JSON in this exact format:
   }
 }
 
-// Initialize service
-const factCheckService = new FactCheckService();
+class MockProvider {
+  async check(claim) {
+    const lowerClaim = claim.toLowerCase();
+    const patterns = {
+      'TRUE': ['sky is blue', 'earth is round', 'water is wet'],
+      'FALSE': ['earth is flat', 'vaccines cause autism', 'moon landing was fake'],
+      'MIXED': ['coffee is healthy', 'carbs are bad']
+    };
 
-// Handle extension icon click
-chrome.action.onClicked.addListener((tab) => {
-  console.log('PopFact: Extension icon clicked');
-});
+    const data = await response.json();
 
-// Clean up cache periodically (every 30 minutes)
-setInterval(() => {
-  factCheckService.clearCache();
-  console.log('PopFact: Cache cleared');
-}, 30 * 60 * 1000);
+    if (!data.claims || data.claims.length === 0) {
+      return {
+        claim: claim,
+        verdict: 'UNVERIFIED',
+        explanation: 'No fact-checks found for this claim',
+        confidence: 0,
+        sources: [],
+        sourceDetails: [],
+        timestamp: Date.now()
+      };
+    }
 
+    for (const [category, keywords] of Object.entries(patterns)) {
+      if (keywords.some(keyword => lowerClaim.includes(keyword))) {
+        verdict = category;
+        confidence = category === 'TRUE' ? 0.9 : category === 'FALSE' ? 0.1 : 0.55;
+        break;
+      }
+    }
+
+    return {
+      verdict,
+      explanation: this.generateExplanation(verdict),
+      confidence,
+      sources: []
+    };
+  }
+
+  generateExplanation(verdict) {
+    const explanations = {
+      'TRUE': 'This claim is supported by reliable sources',
+      'FALSE': 'This claim contradicts established facts',
+      'MIXED': 'This claim contains both accurate and inaccurate elements',
+      'UNVERIFIED': 'Insufficient evidence to verify this claim'
+    };
+    return explanations[verdict] || 'Verification pending';
+  }
+}
+
+class OpenKnowledgeProvider {
+  async check(claim, context = {}) {
+    const [wikiResult, twitterResult] = await Promise.all([
+      this.queryWikipedia(claim),
+      this.queryTwitterContext(claim)
+    ]);
+
+    const sources = [];
+    if (wikiResult?.url) sources.push(wikiResult.url);
+    if (twitterResult?.url) sources.push(twitterResult.url);
+
+    const verdict = this.deriveVerdict(wikiResult, twitterResult);
+    const explanation = this.buildExplanation(wikiResult, twitterResult, verdict);
+    const confidence = this.estimateConfidence(wikiResult, twitterResult, context.confidenceThreshold);
+
+    return {
+      verdict,
+      explanation,
+      confidence,
+      sources
+    };
+  }
+
+  async queryWikipedia(claim) {
+    const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&origin=*&srsearch=${encodeURIComponent(claim)}&srlimit=1`;
+    const response = await fetch(searchUrl);
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const hit = data?.query?.search?.[0];
+    if (!hit) return null;
+
+    const cleanSnippet = hit.snippet ? hit.snippet.replace(/<[^>]+>/g, '') : '';
+    const pageTitle = hit.title.replace(/\s+/g, '_');
+    return {
+      title: hit.title,
+      snippet: cleanSnippet,
+      url: `https://en.wikipedia.org/wiki/${encodeURIComponent(pageTitle)}`
+    };
+  }
+
+  async queryTwitterContext(claim) {
+    const searchUrl = `https://r.jina.ai/https://twitter.com/search?q=${encodeURIComponent(claim)}&src=typed_query&f=live`;
+    const response = await fetch(searchUrl);
+    if (!response.ok) return null;
+
+    const body = await response.text();
+    const tweetMatch = body.match(/data-testid="tweet"[\s\S]*?<span[^>]*>([^<]{20,280})/i);
+    const snippet = tweetMatch ? tweetMatch[1].replace(/\s+/g, ' ').trim() : null;
+
+    return {
+      snippet,
+      url: `https://twitter.com/search?q=${encodeURIComponent(claim)}`
+    };
+  }
+
+  deriveVerdict(wikiResult, twitterResult) {
+    if (wikiResult?.snippet && /hoax|false|misinformation|debunked/i.test(wikiResult.snippet)) {
+      return 'FALSE';
+    }
+    if (wikiResult?.snippet && /is a|was a|are the|known for/i.test(wikiResult.snippet)) {
+      return 'TRUE';
+    }
+    if (twitterResult?.snippet && /disputed|mixed|questionable/i.test(twitterResult.snippet)) {
+      return 'MIXED';
+    }
+    return 'UNVERIFIED';
+  }
+
+  buildExplanation(wikiResult, twitterResult, verdict) {
+    const parts = [];
+    if (wikiResult?.title) {
+      parts.push(`Wikipedia context: ${wikiResult.title}${wikiResult.snippet ? ' — ' + wikiResult.snippet : ''}`);
+    }
+    if (twitterResult?.snippet) {
+      parts.push(`Twitter chatter: ${twitterResult.snippet}`);
+    }
+    if (parts.length === 0) {
+      return 'No open sources found yet; monitoring for updates.';
+    }
+    return `${verdict === 'TRUE' ? 'Supported by public knowledge.' : 'Open source context gathered.'} ${parts.join(' | ')}`;
+  }
+
+  estimateConfidence(wikiResult, twitterResult, threshold = 50) {
+    let base = 0.45;
+    if (wikiResult) base += 0.25;
+    if (twitterResult?.snippet) base += 0.1;
+    return Math.min(1, Math.max(0, base + threshold / 500));
+  }
+}
+
+console.log('PopFact Background Service: Initialized (Mock Mode)');

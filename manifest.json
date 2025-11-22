@@ -1,8 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "PopFact - Real-time Fact Checker",
+  "name": "PopFact Demo - Fact-Check Concept",
+  "short_name": "PopFact",
   "version": "1.0.0",
-  "description": "A real-time fact-checking overlay that verifies declarative statements from text, voice, and video content.",
+  "description": "Demo: CNN-style fact-checking ticker overlay. Uses mock keyword matching for demonstration only - not real fact-checking.",
+  "author": "PetrefiedThunder",
+  "homepage_url": "https://github.com/PetrefiedThunder/PopFact",
   "permissions": [
     "activeTab",
     "storage",
@@ -11,6 +14,9 @@
   "host_permissions": [
     "<all_urls>"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
   "background": {
     "service_worker": "background.js"
   },
@@ -26,18 +32,21 @@
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
   },
   "icons": {
     "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
     "48": "icons/icon48.png",
+    "96": "icons/icon96.png",
     "128": "icons/icon128.png"
   },
   "web_accessible_resources": [
     {
-      "resources": ["overlay.css"],
+      "resources": ["overlay.css", "disclaimer.html"],
       "matches": ["<all_urls>"]
     }
   ]

@@ -1,294 +1,348 @@
-# PopFact - Real-time Fact Checker Browser Extension
+# PopFact Demo - Fact-Checking Overlay Concept
 
-PopFact is a browser extension that provides real-time fact-checking for web content, including text, audio, and video. Inspired by Pop-Up Video and news network tickers, it displays verified information in a continuous scroll at the bottom of your browser.
+> ⚠️ **IMPORTANT:** This is a **demonstration/proof-of-concept** extension that uses mock keyword matching, NOT real fact-checking. Do not rely on results for accurate information.
+
+PopFact is a browser extension that demonstrates a CNN-style fact-checking ticker overlay. It showcases the UI/UX concept of real-time fact verification displays, but currently uses simple pattern matching for demonstration purposes only.
+
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Chrome](https://img.shields.io/badge/Chrome-Manifest%20V3-green.svg)](manifest.json)
+[![Firefox](https://img.shields.io/badge/Firefox-Compatible-orange.svg)](manifest.json)
+
+## ⚠️ Disclaimer
+
+**PopFact is a DEMONSTRATION ONLY:**
+- Uses simple keyword matching (e.g., "climate" → TRUE, "flat earth" → FALSE)
+- Does NOT connect to real fact-checking databases
+- Does NOT provide accurate or reliable verification
+- Should NOT be used for actual fact-checking
+
+**For real fact-checking, visit:** [Snopes](https://www.snopes.com), [FactCheck.org](https://www.factcheck.org), [PolitiFact](https://www.politifact.com)
 
 ## Features
 
-🔍 **Multi-Source Fact-Checking**
-- Analyzes text content on web pages
-- Transcribes and fact-checks audio content
-- Processes video content for declarative statements
+📺 **CNN-Style News Ticker**
+- Fixed overlay at bottom of browser viewport
+- Horizontal scrolling fact-check results
+- Color-coded verdicts (Green = True, Red = False, Yellow = Mixed, Gray = Unverified)
 
-📺 **News Ticker Display**
-- Continuous scroll at the bottom of the screen
-- Color-coded verdicts (✓ True, ✗ False, ! Mixed, ? Unverified)
-- Non-intrusive design that can be toggled on/off
+🔍 **Text Analysis (Demo Mode)**
+- Extracts claims from web page text
+- Identifies declarative statements
+- Matches against keyword patterns
+- Displays mock results in ticker
 
 ⚡ **Real-time Processing**
 - Automatic detection of declarative statements
 - Background processing with intelligent caching
 - Configurable confidence thresholds
+- Uses open knowledge sources (Wikipedia + Twitter context) by default so you can fact-check without private API keys
 
 🎛️ **Customizable Settings**
-- Choose which content types to monitor
-- Adjust ticker speed and appearance
-- Configure fact-checking API provider
+- Ticker speed control
+- Confidence threshold adjustment
+- Enable/disable content types
+- API provider selection (for future real integration)
 
 ## Installation
 
-### For Development
+### For Testing/Demo
 
-1. Clone this repository:
+1. **Clone this repository:**
    ```bash
    git clone https://github.com/PetrefiedThunder/PopFact.git
    cd PopFact
    ```
 
-2. Generate icon files:
+2. **Generate PNG icons** (required):
+
+   See [GENERATE_ICONS.md](GENERATE_ICONS.md) for detailed instructions.
+
+   **Quick method with ImageMagick:**
    ```bash
    cd icons
-   # Use ImageMagick or online converter to create PNG icons from icon.svg
-   # See generate-icons.sh for instructions
+   convert icon.svg -resize 16x16 icon16.png
+   convert icon.svg -resize 48x48 icon48.png
+   convert icon.svg -resize 128x128 icon128.png
    ```
 
-3. Load the extension in Chrome:
-   - Open Chrome and navigate to `chrome://extensions/`
-   - Enable "Developer mode" (toggle in top-right)
+3. **Load in Chrome:**
+   - Open `chrome://extensions/`
+   - Enable "Developer mode"
    - Click "Load unpacked"
    - Select the `PopFact` directory
 
-4. Load the extension in Firefox:
-   - Open Firefox and navigate to `about:debugging#/runtime/this-firefox`
+4. **Load in Firefox:**
+   - Open `about:debugging#/runtime/this-firefox`
    - Click "Load Temporary Add-on"
-   - Select the `manifest.json` file
+   - Select `manifest.json`
 
-### For Production
+### From Chrome Web Store
 
-Install from the Chrome Web Store or Firefox Add-ons (coming soon).
-
-## Configuration
-
-### API Setup
-
-PopFact requires a fact-checking API to verify claims. You have several options:
-
-#### Option 1: OpenAI GPT-4 (Recommended for development)
-
-1. Get an API key from https://platform.openai.com/
-2. Click the PopFact extension icon
-3. Select "OpenAI" as API Provider
-4. Enter your API key
-5. Click "Save Settings"
-
-#### Option 2: Anthropic Claude
-
-1. Get an API key from https://console.anthropic.com/
-2. Configure in extension settings
-3. Modify `background.js` to use Claude API format
-
-#### Option 3: Google Fact Check Tools API
-
-1. Enable the API at https://console.cloud.google.com/
-2. Get your API key
-3. Configure in extension settings
-
-#### Option 4: Custom Fact-Checking API
-
-Implement your own fact-checking service:
-
-1. Update the `performFactCheck()` method in `background.js`
-2. Format the API response to match the expected structure:
-   ```javascript
-   {
-     claim: string,
-     verdict: 'TRUE' | 'FALSE' | 'MIXED' | 'UNVERIFIED',
-     explanation: string,
-     confidence: number, // 0-1
-     sources: string[],
-     timestamp: number
-   }
-   ```
+_Coming soon_ - See [Production Deployment](#production-deployment) for store submission status.
 
 ## Usage
 
-1. **Automatic Monitoring**: Once installed, PopFact automatically monitors web pages for declarative statements
+1. **Visit any webpage** (news sites work best)
+2. **Watch the ticker** appear at the bottom of the page
+3. **See fact-checks scroll** with color-coded verdicts
+4. **Click extension icon** to access settings
 
-2. **Toggle Overlay**: Click the floating button in the bottom-right to show/hide the ticker
-
-3. **View Results**: Fact-checked claims scroll across the bottom with color-coded verdicts
-
-4. **Configure Settings**: Click the extension icon to access settings and statistics
+The ticker will automatically:
+- Extract text from `<p>`, `<h1>`, `<h2>`, `<h3>` elements
+- Identify up to 5 potential factual claims
+- Match them against keyword patterns
+- Display results in the scrolling ticker
 
 ## How It Works
 
-### Text Analysis
-
-1. **Content Extraction**: The content script scans the page for text nodes
-2. **Sentence Detection**: Text is split into sentences using pattern matching
-3. **Declarative Filtering**: Sentences are filtered for factual claims
-4. **Fact Checking**: Claims are sent to the background service for verification
-5. **Display**: Results appear in the ticker with appropriate verdicts
-
-### Audio/Video Processing
-
-1. **Media Detection**: The extension monitors `<audio>` and `<video>` elements
-2. **Transcription**: Audio is transcribed using Web Speech API or external service
-3. **Analysis**: Transcribed text is processed like regular text content
-4. **Real-time Updates**: Facts appear in the ticker as media plays
-
-### Fact-Checking Pipeline
-
-```
-Page Content → Extract Claims → Background Service → API Request
-                                                          ↓
-Display Ticker ← Format Results ← Cache Results ← API Response
+### Text Extraction
+```javascript
+1. Scan page for paragraph and heading elements
+2. Split text into sentences
+3. Filter for declarative statements (>40 chars, >6 words)
+4. Send first 5 claims to background script
 ```
 
-## Architecture
+### Mock Fact-Checking
+```javascript
+1. Normalize claim text to lowercase
+2. Check for keyword patterns:
+   - "covid" → MIXED
+   - "2020 election" → FALSE
+   - "earth is round", "vaccines work" → TRUE
+   - "climate", "warming" → TRUE
+   - "flat earth" → FALSE
+   - Other → UNVERIFIED
+3. Return mock verdict with explanation
+```
 
+### Display
+```javascript
+1. Receive results from background script
+2. Create ticker items with appropriate color class
+3. Duplicate content for seamless scrolling
+4. Animate with CSS transform
 ```
-PopFact/
-├── manifest.json          # Extension configuration
-├── content.js            # Content script (injected into pages)
-├── background.js         # Service worker (fact-checking logic)
-├── overlay.css           # Ticker styling
-├── popup.html            # Settings UI
-├── popup.css             # Settings styling
-├── popup.js              # Settings logic
-└── icons/                # Extension icons
-    ├── icon.svg
-    ├── icon16.png
-    ├── icon48.png
-    └── icon128.png
-```
+
+## Project Structure
+
+4. **Configure Settings**: Click the extension icon to access settings and statistics
+5. **Send Wrap-up Email**: From the popup, choose "Send Wrap-up Email" to launch an email draft with a spreadsheet-style summary of the latest fact checks
 
 ## Development
 
 ### Prerequisites
 
-- Node.js (for development tools)
+- Chrome 88+ or Firefox 89+
+- Node.js (optional, for development tools)
+- ImageMagick or image editor (for icon generation)
+
+### Testing
+
+```bash
+# Validate extension files
+./validate.sh
+
+# Run in Chrome
+chrome://extensions/ → Load unpacked
+
+# Test on these sites
+- https://www.cnn.com
+- https://www.bbc.com
+- https://www.nytimes.com
+```
+
+### Debugging
+
+Open DevTools (F12) and check console for:
+```
+PopFact: Overlay initialized
+PopFact: Extracted 5 claims for fact-checking
+PopFact: Processing fact-check request: [claim text]
+```
+
+See [DEBUG.md](DEBUG.md) for comprehensive debugging guide.
+
+## Production Deployment
+
+- Node.js 18+ (for development tools)
 - Chrome or Firefox browser
 - API key for fact-checking service
 
-### Testing
+❌ **NOT READY FOR PRODUCTION** - Critical issues must be fixed first.
+
+PopFact includes a comprehensive QA test suite built with Playwright.
+
+**Quick Start:**
+```bash
+# Install dependencies
+npm install
+
+# Install Playwright browsers
+npx playwright install chromium
+
+# Run all tests
+npm test
+
+# Run tests with UI
+npm run test:ui
+```
+
+**Test Categories:**
+- **Basic Overlay Tests** - Core functionality (9 tests)
+- **Fact-Checking Tests** - Mocked AI responses (9 tests)
+- **Performance Tests** - < 200ms load time (8 tests)
+- **Anti-Fragility Tests** - Edge cases and resilience (11 tests)
+
+**Key Features:**
+- 🚫 No live API calls (all responses mocked)
+- ⚡ Performance guardrails (< 200ms overlay load)
+- 🎯 Resilient selectors (works with HTML changes)
+- 📊 36 comprehensive tests
+
+For detailed testing documentation, see [TESTING.md](TESTING.md) and [tests/README.md](tests/README.md).
+
+### Manual Testing
 
 1. Load the extension in developer mode
 2. Visit any news website or article
 3. Open the browser console to see PopFact logs
 4. Watch the ticker for fact-check results
 
-### Debugging
+### Required Before Store Submission
 
-- Enable console logging in `background.js` and `content.js`
-- Use Chrome DevTools to inspect the overlay element
-- Check the background service worker console for API errors
+1. ✅ Generate PNG icons (`GENERATE_ICONS.md`)
+2. ⚠️ Host privacy policy publicly
+3. ✅ Update descriptions to say "Demo"
+4. ✅ Add disclaimer on install
+5. ✅ Replace innerHTML with safe DOM methods
+6. ⚠️ Create store screenshots
+7. ⚠️ Test thoroughly
 
-## API Integration Examples
+### Submission Guides
 
-### OpenAI Integration
-
-```javascript
-async performFactCheck(claim) {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${YOUR_API_KEY}`
-    },
-    body: JSON.stringify({
-      model: 'gpt-4',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a fact-checking assistant. Analyze claims and respond with TRUE, FALSE, MIXED, or UNVERIFIED.'
-        },
-        {
-          role: 'user',
-          content: `Fact-check: "${claim}"`
-        }
-      ]
-    })
-  });
-
-  const data = await response.json();
-  // Parse and return formatted result
-}
-```
-
-### Claude Integration
-
-```javascript
-async performFactCheck(claim) {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': YOUR_API_KEY,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: 'claude-3-opus-20240229',
-      max_tokens: 1024,
-      messages: [{
-        role: 'user',
-        content: `Fact-check this claim: "${claim}"`
-      }]
-    })
-  });
-
-  const data = await response.json();
-  // Parse and return formatted result
-}
-```
-
-## Privacy & Security
-
-- **No Data Collection**: PopFact does not collect or store personal information
-- **Local Processing**: Text extraction happens locally in your browser
-- **API Communication**: Only claims are sent to fact-checking APIs
-- **Cache Management**: Results are cached locally to minimize API calls
-- **Optional Features**: All monitoring can be disabled in settings
-
-## Contributing
-
-Contributions are welcome! Please follow these guidelines:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- **Quick Start:** [QUICK_START_PRODUCTION.md](QUICK_START_PRODUCTION.md) (4-hour guide)
+- **Full Audit:** [PRODUCTION_AUDIT.md](PRODUCTION_AUDIT.md) (complete compliance)
+- **Checklist:** Generated by `./prepare-production.sh`
 
 ## Roadmap
 
-- [ ] Support for more fact-checking APIs
-- [ ] Machine learning-based claim detection
-- [ ] Browser-native speech recognition
+**v1.0** (Current) - Demo with Mock Data
+- ✅ CNN-style ticker overlay
+- ✅ Text extraction from pages
+- ✅ Mock keyword-based fact-checking
+- ✅ Color-coded verdicts
+- ✅ Settings UI
+
+**v1.1** (Planned) - Enhanced Demo
+- [ ] Improved claim detection
+- [ ] More keyword patterns
+- [ ] Better ticker animation
+- [ ] Keyboard shortcuts
+- [ ] Dark mode support
+
+**v2.0** (Future) - Real Fact-Checking
+- [ ] Integration with fact-checking APIs (OpenAI, Claude, Google Fact Check)
+- [ ] Machine learning claim classification
+- [ ] Source attribution
+- [ ] User-submitted fact-checks
+- [ ] Browser action for per-site control
+
+**v3.0** (Vision) - Advanced Features
+- [ ] Audio transcription and fact-checking
+- [ ] Video caption extraction
 - [ ] Multi-language support
-- [ ] Customizable overlay themes
-- [ ] Export fact-check history
-- [ ] Integration with academic databases
-- [ ] Community-sourced fact-checking
+- [ ] Community fact-checking
+- [ ] Browser-native implementation
 
-## Known Limitations
+## API Integration (Future)
 
-- Audio transcription requires external API (not yet implemented)
-- Video analysis is limited to embedded captions/transcripts
-- Fact-checking accuracy depends on the configured API
-- Some dynamic content may not be detected immediately
-- Rate limiting may apply based on API provider
+The extension is designed to support real fact-checking APIs:
+
+```javascript
+// Example: OpenAI integration (not yet implemented)
+async function performFactCheck(claim) {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'gpt-4',
+      messages: [{
+        role: 'user',
+        content: `Fact-check: "${claim}"`
+      }]
+    })
+  });
+  // Process response...
+}
+```
+
+See [API_INTEGRATION.md](API_INTEGRATION.md) for integration examples.
+
+## Privacy
+
+PopFact respects your privacy:
+- ✅ All processing happens **locally** in your browser
+- ✅ **No data** sent to external servers
+- ✅ **No tracking** or analytics
+- ✅ **No personal information** collected
+- ✅ Settings stored locally only
+
+See [PRIVACY_POLICY.md](PRIVACY_POLICY.md) for full details.
+
+## Contributing
+
+Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+**Areas for contribution:**
+- Improved claim detection algorithms
+- Additional keyword patterns for mock data
+- UI/UX enhancements
+- Real API integrations
+- Documentation improvements
+- Bug fixes and testing
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+```
+Copyright 2024 PetrefiedThunder
+
+Licensed under the Apache License, Version 2.0
+```
 
 ## Acknowledgments
 
 - Inspired by VH1's Pop-Up Video
-- News ticker design inspired by CNN, BBC, and other news networks
+- News ticker design inspired by CNN, BBC, Fox News
 - Built with Chrome Extensions Manifest V3
+- Open source community
 
 ## Support
 
-For issues, questions, or suggestions:
-- Open an issue on GitHub
-- Email: support@popfact.example.com
-- Documentation: https://github.com/PetrefiedThunder/PopFact/wiki
+- **GitHub Issues:** [Report bugs or request features](https://github.com/PetrefiedThunder/PopFact/issues)
+- **Discussions:** [Ask questions](https://github.com/PetrefiedThunder/PopFact/discussions)
+- **Documentation:** Check the `/docs` folder or `.md` files
+- **Email:** [Coming soon]
 
-## Disclaimer
+## Disclaimer (Repeated for Emphasis)
 
-PopFact is a tool to assist with fact-checking and should not be the sole source of truth. Always verify important information through multiple reliable sources. The accuracy of fact-checks depends on the configured API provider and the quality of their data sources.
+**THIS EXTENSION IS FOR DEMONSTRATION PURPOSES ONLY.**
+
+PopFact uses simple keyword matching and does NOT provide real fact-checking. Results are mock data generated locally and should NOT be considered factual. Always verify important information through authoritative fact-checking sources like Snopes, FactCheck.org, or PolitiFact.
+
+By installing this extension, you acknowledge:
+- Results are mock/demonstration data
+- Extension should NOT be used for actual fact verification
+- You will NOT rely on results for important decisions
+- You understand this is a proof-of-concept only
 
 ---
 
-Made with ❤️ for truth and accuracy
+**Made with ❤️ for truth, accuracy, and good UI/UX**
+
+**Status:** Demo/Proof-of-Concept | **Version:** 1.0.0 | **Updated:** 2024-11-18
