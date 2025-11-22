@@ -245,7 +245,7 @@ class PopFactOverlay {
   }
 
   displayFactCheck(result) {
-    const { claim, verdict, explanation, confidence } = result;
+    const { claim, verdict, explanation, confidence, sourceDetails, sources, consensus } = result;
 
     // Determine verdict category
     let category = 'unverified';
@@ -257,20 +257,127 @@ class PopFactOverlay {
       category = 'mixed';
     }
 
+    // Get source information
+    const sourceInfo = this.formatSourceInfo(sourceDetails || [], sources || [], consensus);
+
     // Create fact check item
     const factItem = document.createElement('div');
     factItem.className = `popfact-item ${category}`;
     factItem.innerHTML = `
       <span class="popfact-item-icon">${this.getVerdictIcon(category)}</span>
       <span class="popfact-item-text">
-        <span class="popfact-claim">${this.truncate(claim, 80)}</span>
+        <span class="popfact-claim">${this.truncate(claim, 70)}</span>
         <span class="popfact-verdict">${explanation || verdict}</span>
+        ${sourceInfo ? `<span class="popfact-sources">${sourceInfo}</span>` : ''}
       </span>
       <span class="popfact-separator"></span>
     `;
 
+    // Add click handler to show source details
+    if (sourceDetails && sourceDetails.length > 0) {
+      factItem.style.cursor = 'pointer';
+      factItem.title = 'Click to view sources';
+      factItem.addEventListener('click', () => this.showSourceDetails(result));
+    }
+
     // Add to ticker
     this.addToTicker(factItem);
+  }
+
+  formatSourceInfo(sourceDetails, sources, consensus) {
+    if (!sourceDetails || sourceDetails.length === 0) {
+      if (sources && sources.length > 0) {
+        return `[${sources.length} source${sources.length > 1 ? 's' : ''}]`;
+      }
+      return '';
+    }
+
+    // Get unique source names
+    const uniqueSources = [];
+    const seen = new Set();
+    sourceDetails.forEach(source => {
+      if (source.name && !seen.has(source.name)) {
+        seen.add(source.name);
+        uniqueSources.push(source);
+      }
+    });
+
+    // Sort by credibility
+    uniqueSources.sort((a, b) => (b.credibility || 0) - (a.credibility || 0));
+
+    // Show top sources (max 3)
+    const topSources = uniqueSources.slice(0, 3);
+    const sourceNames = topSources.map(s => s.name).join(', ');
+    const moreCount = uniqueSources.length > 3 ? ` +${uniqueSources.length - 3}` : '';
+    
+    // Add consensus indicator if multiple sources
+    const consensusIndicator = consensus && consensus.reviewCount > 1 
+      ? ` [${consensus.reviewCount} reviews]` 
+      : '';
+
+    return sourceNames ? `Sources: ${sourceNames}${moreCount}${consensusIndicator}` : '';
+  }
+
+  showSourceDetails(result) {
+    // Create modal or expandable section to show detailed source information
+    const modal = document.createElement('div');
+    modal.className = 'popfact-source-modal';
+    modal.innerHTML = `
+      <div class="popfact-modal-content">
+        <div class="popfact-modal-header">
+          <h3>Fact-Check Sources</h3>
+          <button class="popfact-modal-close">×</button>
+        </div>
+        <div class="popfact-modal-body">
+          <div class="popfact-claim-detail">
+            <strong>Claim:</strong> ${result.claim}
+          </div>
+          <div class="popfact-verdict-detail">
+            <strong>Verdict:</strong> <span class="verdict-${result.verdict.toLowerCase()}">${result.verdict}</span>
+            <span class="confidence">Confidence: ${Math.round((result.confidence || 0) * 100)}%</span>
+          </div>
+          <div class="popfact-explanation-detail">
+            <strong>Explanation:</strong> ${result.explanation}
+          </div>
+          ${result.sourceDetails && result.sourceDetails.length > 0 ? `
+            <div class="popfact-sources-detail">
+              <strong>Sources (${result.sourceDetails.length}):</strong>
+              <ul>
+                ${result.sourceDetails.map(source => `
+                  <li>
+                    <a href="${source.url}" target="_blank" rel="noopener noreferrer">
+                      ${source.name || 'Unknown Source'}
+                    </a>
+                    <span class="source-type">${source.type || 'unknown'}</span>
+                    <span class="source-credibility">Credibility: ${Math.round((source.credibility || 0.5) * 100)}%</span>
+                  </li>
+                `).join('')}
+              </ul>
+            </div>
+          ` : ''}
+          ${result.consensus ? `
+            <div class="popfact-consensus-detail">
+              <strong>Consensus:</strong> Based on ${result.consensus.reviewCount} review${result.consensus.reviewCount > 1 ? 's' : ''}
+              ${result.consensus.verdictDistribution ? `
+                <div class="verdict-distribution">
+                  ${Object.entries(result.consensus.verdictDistribution).map(([v, c]) => 
+                    c > 0 ? `${v}: ${c}` : ''
+                  ).filter(Boolean).join(', ')}
+                </div>
+              ` : ''}
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Close handlers
+    modal.querySelector('.popfact-modal-close').addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.remove();
+    });
   }
 
   getVerdictIcon(category) {

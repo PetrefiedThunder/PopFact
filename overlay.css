@@ -206,3 +206,195 @@
   color: #ccc;
   font-style: italic;
 }
+
+/* Source information */
+.popfact-sources {
+  font-size: 11px;
+  color: #999;
+  margin-top: 2px;
+  font-style: normal;
+}
+
+/* Source modal */
+.popfact-source-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 2147483648;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.popfact-modal-content {
+  background: #1a1a1a;
+  border-radius: 12px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.popfact-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #333;
+}
+
+.popfact-modal-header h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 20px;
+}
+
+.popfact-modal-close {
+  background: none;
+  border: none;
+  color: #ccc;
+  font-size: 32px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.popfact-modal-close:hover {
+  background: #333;
+  color: #fff;
+}
+
+.popfact-modal-body {
+  padding: 20px;
+  color: #ddd;
+  line-height: 1.6;
+}
+
+.popfact-claim-detail,
+.popfact-verdict-detail,
+.popfact-explanation-detail,
+.popfact-sources-detail,
+.popfact-consensus-detail {
+  margin-bottom: 20px;
+}
+
+.popfact-claim-detail strong,
+.popfact-verdict-detail strong,
+.popfact-explanation-detail strong,
+.popfact-sources-detail strong,
+.popfact-consensus-detail strong {
+  color: #fff;
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.verdict-true {
+  color: #28a745;
+  font-weight: bold;
+}
+
+.verdict-false {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+.verdict-mixed {
+  color: #ffc107;
+  font-weight: bold;
+}
+
+.verdict-unverified {
+  color: #6c757d;
+  font-weight: bold;
+}
+
+.confidence {
+  margin-left: 12px;
+  font-size: 13px;
+  color: #999;
+}
+
+.popfact-sources-detail ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.popfact-sources-detail li {
+  padding: 12px;
+  margin-bottom: 8px;
+  background: #252525;
+  border-radius: 6px;
+  border-left: 3px solid #ff6b35;
+}
+
+.popfact-sources-detail li a {
+  color: #4da6ff;
+  text-decoration: none;
+  font-weight: 500;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.popfact-sources-detail li a:hover {
+  text-decoration: underline;
+}
+
+.source-type {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #333;
+  border-radius: 4px;
+  font-size: 11px;
+  margin-left: 8px;
+  text-transform: capitalize;
+  color: #aaa;
+}
+
+.source-credibility {
+  display: block;
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.verdict-distribution {
+  margin-top: 8px;
+  padding: 8px;
+  background: #252525;
+  border-radius: 4px;
+  font-size: 13px;
+}

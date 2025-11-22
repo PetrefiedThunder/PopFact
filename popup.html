@@ -66,6 +66,36 @@
           <span id="confidence-value">50%</span>
         </label>
       </div>
+
+      <div class="setting-item">
+        <label>
+          <input type="checkbox" id="use-multi-source" checked>
+          <span>Use multi-source verification (recommended)</span>
+        </label>
+        <p class="setting-hint">Check multiple sources for higher accuracy</p>
+      </div>
+    </div>
+
+    <div class="source-credibility-section">
+      <h2>Source Credibility</h2>
+      <p class="api-note">Control which sources are used for fact-checking</p>
+
+      <div class="setting-item">
+        <label>
+          <input type="checkbox" id="trusted-sources-only">
+          <span>Only use trusted sources</span>
+        </label>
+        <p class="setting-hint">Limit to verified fact-checkers, reputable news, academic, and government sources</p>
+      </div>
+
+      <div class="setting-item">
+        <label>
+          <span>Minimum Source Credibility:</span>
+          <input type="range" id="min-source-credibility" min="0" max="100" value="70">
+          <span id="credibility-value">70%</span>
+        </label>
+        <p class="setting-hint">Sources below this threshold will be filtered out</p>
+      </div>
     </div>
 
     <div class="api-section">

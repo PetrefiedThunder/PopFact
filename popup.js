@@ -14,7 +14,10 @@ function loadSettings() {
     tickerSpeed: 'medium',
     confidenceThreshold: 50,
     apiProvider: 'mock',
-    apiKey: ''
+    apiKey: '',
+    useMultiSource: true,
+    trustedSourcesOnly: false,
+    minSourceCredibility: 70
   }, (settings) => {
     document.getElementById('enable-text').checked = settings.enableText;
     document.getElementById('enable-audio').checked = settings.enableAudio;
@@ -24,6 +27,10 @@ function loadSettings() {
     document.getElementById('confidence-value').textContent = settings.confidenceThreshold + '%';
     document.getElementById('api-provider').value = settings.apiProvider;
     document.getElementById('api-key').value = settings.apiKey;
+    document.getElementById('use-multi-source').checked = settings.useMultiSource !== false;
+    document.getElementById('trusted-sources-only').checked = settings.trustedSourcesOnly || false;
+    document.getElementById('min-source-credibility').value = settings.minSourceCredibility || 70;
+    document.getElementById('credibility-value').textContent = (settings.minSourceCredibility || 70) + '%';
   });
 }
 
@@ -42,6 +49,11 @@ function setupEventListeners() {
     document.getElementById('confidence-value').textContent = e.target.value + '%';
   });
 
+  // Source credibility slider
+  document.getElementById('min-source-credibility').addEventListener('input', (e) => {
+    document.getElementById('credibility-value').textContent = e.target.value + '%';
+  });
+
   // Help link
   document.getElementById('help-link').addEventListener('click', (e) => {
     e.preventDefault();
@@ -57,10 +69,16 @@ function saveSettings() {
     tickerSpeed: document.getElementById('ticker-speed').value,
     confidenceThreshold: parseInt(document.getElementById('confidence-threshold').value),
     apiProvider: document.getElementById('api-provider').value,
-    apiKey: document.getElementById('api-key').value
+    apiKey: document.getElementById('api-key').value,
+    useMultiSource: document.getElementById('use-multi-source').checked,
+    trustedSourcesOnly: document.getElementById('trusted-sources-only').checked,
+    minSourceCredibility: parseInt(document.getElementById('min-source-credibility').value)
   };
 
   chrome.storage.sync.set(settings, () => {
+    // Notify background script to update settings
+    chrome.runtime.sendMessage({ type: 'UPDATE_SETTINGS' });
+    
     // Show success feedback
     const btn = document.getElementById('save-settings');
     const originalText = btn.textContent;
