@@ -260,15 +260,20 @@ class PopFactOverlay {
     // Get source information
     const sourceInfo = this.formatSourceInfo(sourceDetails || [], sources || [], consensus);
 
+    // Escape user-provided content to prevent XSS
+    const escapedClaim = this.escapeHtml(this.truncate(claim || '', 70));
+    const escapedExplanation = this.escapeHtml(explanation || verdict || '');
+    const escapedSourceInfo = sourceInfo ? this.escapeHtml(sourceInfo) : '';
+
     // Create fact check item
     const factItem = document.createElement('div');
     factItem.className = `popfact-item ${category}`;
     factItem.innerHTML = `
       <span class="popfact-item-icon">${this.getVerdictIcon(category)}</span>
       <span class="popfact-item-text">
-        <span class="popfact-claim">${this.truncate(claim, 70)}</span>
-        <span class="popfact-verdict">${explanation || verdict}</span>
-        ${sourceInfo ? `<span class="popfact-sources">${sourceInfo}</span>` : ''}
+        <span class="popfact-claim">${escapedClaim}</span>
+        <span class="popfact-verdict">${escapedExplanation}</span>
+        ${escapedSourceInfo ? `<span class="popfact-sources">${escapedSourceInfo}</span>` : ''}
       </span>
       <span class="popfact-separator"></span>
     `;
@@ -322,6 +327,61 @@ class PopFactOverlay {
     // Create modal or expandable section to show detailed source information
     const modal = document.createElement('div');
     modal.className = 'popfact-source-modal';
+    
+    // Escape all user-provided content to prevent XSS
+    const escapedClaim = this.escapeHtml(result.claim || '');
+    const escapedExplanation = this.escapeHtml(result.explanation || '');
+    const escapedVerdict = this.escapeHtml(result.verdict || 'UNVERIFIED');
+    const verdictClass = this.escapeHtml((result.verdict || 'UNVERIFIED').toLowerCase());
+    const confidence = Math.round((result.confidence || 0) * 100);
+    
+    // Build sources HTML with proper escaping
+    let sourcesHtml = '';
+    if (result.sourceDetails && result.sourceDetails.length > 0) {
+      sourcesHtml = `
+        <div class="popfact-sources-detail">
+          <strong>Sources (${result.sourceDetails.length}):</strong>
+          <ul>
+            ${result.sourceDetails.map(source => {
+              const escapedUrl = this.escapeHtml(source.url || '');
+              const escapedName = this.escapeHtml(source.name || 'Unknown Source');
+              const escapedType = this.escapeHtml(source.type || 'unknown');
+              const sourceCredibility = Math.round((source.credibility || 0.5) * 100);
+              return `
+                <li>
+                  <a href="${escapedUrl}" target="_blank" rel="noopener noreferrer">
+                    ${escapedName}
+                  </a>
+                  <span class="source-type">${escapedType}</span>
+                  <span class="source-credibility">Credibility: ${sourceCredibility}%</span>
+                </li>
+              `;
+            }).join('')}
+          </ul>
+        </div>
+      `;
+    }
+    
+    // Build consensus HTML with proper escaping
+    let consensusHtml = '';
+    if (result.consensus) {
+      const reviewCount = result.consensus.reviewCount || 0;
+      let distributionHtml = '';
+      if (result.consensus.verdictDistribution) {
+        const distribution = Object.entries(result.consensus.verdictDistribution)
+          .filter(([v, c]) => c > 0)
+          .map(([v, c]) => `${this.escapeHtml(v)}: ${c}`)
+          .join(', ');
+        distributionHtml = distribution ? `<div class="verdict-distribution">${distribution}</div>` : '';
+      }
+      consensusHtml = `
+        <div class="popfact-consensus-detail">
+          <strong>Consensus:</strong> Based on ${reviewCount} review${reviewCount !== 1 ? 's' : ''}
+          ${distributionHtml}
+        </div>
+      `;
+    }
+    
     modal.innerHTML = `
       <div class="popfact-modal-content">
         <div class="popfact-modal-header">
@@ -330,43 +390,17 @@ class PopFactOverlay {
         </div>
         <div class="popfact-modal-body">
           <div class="popfact-claim-detail">
-            <strong>Claim:</strong> ${result.claim}
+            <strong>Claim:</strong> ${escapedClaim}
           </div>
           <div class="popfact-verdict-detail">
-            <strong>Verdict:</strong> <span class="verdict-${result.verdict.toLowerCase()}">${result.verdict}</span>
-            <span class="confidence">Confidence: ${Math.round((result.confidence || 0) * 100)}%</span>
+            <strong>Verdict:</strong> <span class="verdict-${verdictClass}">${escapedVerdict}</span>
+            <span class="confidence">Confidence: ${confidence}%</span>
           </div>
           <div class="popfact-explanation-detail">
-            <strong>Explanation:</strong> ${result.explanation}
+            <strong>Explanation:</strong> ${escapedExplanation}
           </div>
-          ${result.sourceDetails && result.sourceDetails.length > 0 ? `
-            <div class="popfact-sources-detail">
-              <strong>Sources (${result.sourceDetails.length}):</strong>
-              <ul>
-                ${result.sourceDetails.map(source => `
-                  <li>
-                    <a href="${source.url}" target="_blank" rel="noopener noreferrer">
-                      ${source.name || 'Unknown Source'}
-                    </a>
-                    <span class="source-type">${source.type || 'unknown'}</span>
-                    <span class="source-credibility">Credibility: ${Math.round((source.credibility || 0.5) * 100)}%</span>
-                  </li>
-                `).join('')}
-              </ul>
-            </div>
-          ` : ''}
-          ${result.consensus ? `
-            <div class="popfact-consensus-detail">
-              <strong>Consensus:</strong> Based on ${result.consensus.reviewCount} review${result.consensus.reviewCount > 1 ? 's' : ''}
-              ${result.consensus.verdictDistribution ? `
-                <div class="verdict-distribution">
-                  ${Object.entries(result.consensus.verdictDistribution).map(([v, c]) => 
-                    c > 0 ? `${v}: ${c}` : ''
-                  ).filter(Boolean).join(', ')}
-                </div>
-              ` : ''}
-            </div>
-          ` : ''}
+          ${sourcesHtml}
+          ${consensusHtml}
         </div>
       </div>
     `;
@@ -378,6 +412,13 @@ class PopFactOverlay {
     modal.addEventListener('click', (e) => {
       if (e.target === modal) modal.remove();
     });
+  }
+
+  escapeHtml(text) {
+    if (text == null) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   getVerdictIcon(category) {

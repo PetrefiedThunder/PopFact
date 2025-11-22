@@ -47,7 +47,9 @@ class FactCheckService {
   async loadUserSettings() {
     const settings = await chrome.storage.sync.get(['trustedSourcesOnly', 'minSourceCredibility']);
     this.trustedSourcesOnly = settings.trustedSourcesOnly || false;
-    this.minSourceCredibility = settings.minSourceCredibility || 0.7;
+    // Convert from 0-100 range (popup slider) to 0.0-1.0 range (credibility scores)
+    const rawThreshold = settings.minSourceCredibility || 70;
+    this.minSourceCredibility = typeof rawThreshold === 'number' ? rawThreshold / 100 : 0.7;
   }
 
   setupMessageListener() {
@@ -465,6 +467,11 @@ Respond with ONLY valid JSON in this exact format:
   }
 
   parseTextualRating(rating) {
+    // Handle null, undefined, or empty rating
+    if (!rating || typeof rating !== 'string') {
+      return 'UNVERIFIED';
+    }
+    
     const upper = rating.toUpperCase();
     if (upper.includes('TRUE') || upper.includes('CORRECT') || upper.includes('ACCURATE')) {
       return 'TRUE';
