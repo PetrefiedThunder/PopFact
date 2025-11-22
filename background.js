@@ -1,14 +1,45 @@
 // PopFact Background Service Worker
-// Handles fact-checking requests and API integration
+// Handles fact-checking requests and API integration with multi-source verification
+
+// Trusted fact-checking organizations and their credibility scores
+const TRUSTED_SOURCES = {
+  // International Fact-Checking Network (IFCN) verified organizations
+  'politifact.com': { name: 'PolitiFact', credibility: 0.95, type: 'fact-checker' },
+  'factcheck.org': { name: 'FactCheck.org', credibility: 0.95, type: 'fact-checker' },
+  'snopes.com': { name: 'Snopes', credibility: 0.90, type: 'fact-checker' },
+  'fullfact.org': { name: 'Full Fact', credibility: 0.95, type: 'fact-checker' },
+  'apnews.com': { name: 'Associated Press', credibility: 0.92, type: 'news' },
+  'reuters.com': { name: 'Reuters', credibility: 0.92, type: 'news' },
+  'bbc.com': { name: 'BBC', credibility: 0.90, type: 'news' },
+  'theguardian.com': { name: 'The Guardian', credibility: 0.88, type: 'news' },
+  'nytimes.com': { name: 'New York Times', credibility: 0.90, type: 'news' },
+  'washingtonpost.com': { name: 'Washington Post', credibility: 0.90, type: 'news' },
+  'nature.com': { name: 'Nature', credibility: 0.98, type: 'academic' },
+  'science.org': { name: 'Science', credibility: 0.98, type: 'academic' },
+  'pubmed.ncbi.nlm.nih.gov': { name: 'PubMed', credibility: 0.97, type: 'academic' },
+  'scholar.google.com': { name: 'Google Scholar', credibility: 0.85, type: 'academic' },
+  'cdc.gov': { name: 'CDC', credibility: 0.95, type: 'government' },
+  'nih.gov': { name: 'NIH', credibility: 0.96, type: 'government' },
+  'who.int': { name: 'WHO', credibility: 0.94, type: 'government' },
+  'nasa.gov': { name: 'NASA', credibility: 0.97, type: 'government' },
+  'noaa.gov': { name: 'NOAA', credibility: 0.96, type: 'government' }
+};
+
+// Academic journal domains (high credibility)
+const ACADEMIC_DOMAINS = [
+  '.edu', '.ac.uk', '.ac.', 'pubmed', 'doi.org', 'arxiv.org',
+  'jstor.org', 'springer.com', 'elsevier.com', 'ieee.org'
+];
 
 
 class FactCheckService {
   constructor() {
-    this.apiEndpoint = 'https://api.example.com/factcheck'; // Replace with actual fact-checking API
     this.cache = new Map();
     this.cacheMaxSize = 1000; // Prevent unbounded cache growth
     this.queue = [];
     this.processing = false;
+    this.trustedSources = TRUSTED_SOURCES;
+    this.sourceCache = new Map(); // Cache source credibility lookups
 
     // Rate limiting: token bucket algorithm
     this.rateLimitTokens = 60; // 60 requests
@@ -105,8 +136,15 @@ class FactCheckService {
 
       if (message.type === 'FACT_CHECK_REQUEST') {
         this.handleFactCheckRequest(message, sender.tab.id);
+        return true; // Keep channel open for async response
       } else if (message.type === 'MEDIA_DETECTED') {
         this.handleMediaDetection(message, sender.tab.id);
+      } else if (message.type === 'CLEAR_CACHE') {
+        this.clearCache();
+        sendResponse({ success: true });
+      } else if (message.type === 'UPDATE_SETTINGS') {
+        this.loadUserSettings();
+        sendResponse({ success: true });
       }
       return true; // Keep message channel open for async responses
     });
@@ -339,8 +377,19 @@ class MockProvider {
       'MIXED': ['coffee is healthy', 'carbs are bad']
     };
 
-    let verdict = 'UNVERIFIED';
-    let confidence = 0.5;
+    const data = await response.json();
+
+    if (!data.claims || data.claims.length === 0) {
+      return {
+        claim: claim,
+        verdict: 'UNVERIFIED',
+        explanation: 'No fact-checks found for this claim',
+        confidence: 0,
+        sources: [],
+        sourceDetails: [],
+        timestamp: Date.now()
+      };
+    }
 
     for (const [category, keywords] of Object.entries(patterns)) {
       if (keywords.some(keyword => lowerClaim.includes(keyword))) {

@@ -61,6 +61,11 @@ function setupEventListeners() {
     document.getElementById('confidence-value').textContent = e.target.value + '%';
   });
 
+  // Source credibility slider
+  document.getElementById('min-source-credibility').addEventListener('input', (e) => {
+    document.getElementById('credibility-value').textContent = e.target.value + '%';
+  });
+
   // Help link
   document.getElementById('help-link').addEventListener('click', (e) => {
     e.preventDefault();
