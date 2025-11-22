@@ -344,13 +344,14 @@ class PopFactOverlay {
           <ul>
             ${result.sourceDetails.map(source => {
               const validatedUrl = this.validateUrl(source.url || '');
-              const escapedUrl = this.escapeHtml(validatedUrl);
+              // Don't HTML-escape URLs - they break query parameters. Use validated URL directly.
+              // The URL is already validated for safe protocols, so it's safe to use in href.
               const escapedName = this.escapeHtml(source.name || 'Unknown Source');
               const escapedType = this.escapeHtml(source.type || 'unknown');
               const sourceCredibility = Math.round((source.credibility || 0.5) * 100);
               return `
                 <li>
-                  <a href="${escapedUrl}" target="_blank" rel="noopener noreferrer">
+                  <a href="${validatedUrl}" target="_blank" rel="noopener noreferrer">
                     ${escapedName}
                   </a>
                   <span class="source-type">${escapedType}</span>

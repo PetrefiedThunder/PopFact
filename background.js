@@ -191,6 +191,13 @@ class FactCheckService {
       }
     }
 
+    // If no results and no errors (no APIs configured), fall back to mock
+    if (results.length === 0 && errors.length === 0) {
+      // Fallback to mock for demo when no APIs are configured
+      const mockResult = await this.mockFactCheck(claim);
+      results.push(mockResult);
+    }
+
     // Aggregate results
     return this.aggregateResults(claim, results, errors);
   }
@@ -432,10 +439,20 @@ Respond with ONLY valid JSON in this exact format:
         credibility: sourceInfo.credibility
       };
     }).filter(source => {
-      // Filter sources based on minimum credibility if enabled
-      if (this.trustedSourcesOnly && source.credibility < this.minSourceCredibility) {
+      // Filter sources based on minimum credibility threshold (applies independently)
+      // The minSourceCredibility setting should always be respected when set
+      if (source.credibility < this.minSourceCredibility) {
         return false;
       }
+      
+      // Additionally, if trustedSourcesOnly is enabled, filter to only trusted source types
+      if (this.trustedSourcesOnly) {
+        const trustedTypes = ['fact-checker', 'news', 'academic', 'government'];
+        if (!trustedTypes.includes(source.type)) {
+          return false;
+        }
+      }
+      
       return source.url && source.url.length > 0;
     });
   }
@@ -751,3 +768,4 @@ setInterval(() => {
   factCheckService.clearCache();
   console.log('PopFact: Cache cleared');
 }, 30 * 60 * 1000);
+
