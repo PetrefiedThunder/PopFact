@@ -1,8 +1,14 @@
 # PopFact Demo - Fact-Checking Overlay Concept
 
-> ⚠️ **IMPORTANT:** This is a **demonstration/proof-of-concept** extension that uses mock keyword matching, NOT real fact-checking. Do not rely on results for accurate information.
+> ⚠️ **IMPORTANT:** This is a **demonstration/proof-of-concept** extension. Verdicts come from heuristic keyword matching and lightweight open-knowledge lookups, **NOT** from real fact-checking services. Do not rely on results for accurate information.
 
-PopFact is a browser extension that demonstrates a CNN-style fact-checking ticker overlay. It showcases the UI/UX concept of real-time fact verification displays, but currently uses simple pattern matching for demonstration purposes only.
+PopFact is a browser extension that demonstrates a CNN-style fact-checking ticker overlay. It showcases the UI/UX concept of real-time fact verification displays, but currently uses mock verdicts and contextual lookups for demonstration purposes only.
+
+### Current Status at a Glance
+- ✅ **Icons included:** PNG icons (`icon16/48/128`) are in the repo; regenerate with `icons/generate-icons.sh` if needed.
+- ⚠️ **Demo-only data:** Default provider uses public Wikipedia/Twitter lookups plus keyword heuristics; a fully offline mock provider is available in settings.
+- ⚠️ **Store readiness:** Privacy policy exists as `PRIVACY_POLICY.md` but still needs hosting; broad `<all_urls>` permission and `innerHTML` usage require review before submission.
+- ✅ **Automated QA:** 36 Playwright tests cover overlay basics, fact-checking flows, performance, and anti-fragility scenarios.
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Chrome](https://img.shields.io/badge/Chrome-Manifest%20V3-green.svg)](manifest.json)
@@ -11,8 +17,8 @@ PopFact is a browser extension that demonstrates a CNN-style fact-checking ticke
 ## ⚠️ Disclaimer
 
 **PopFact is a DEMONSTRATION ONLY:**
-- Uses simple keyword matching (e.g., "climate" → TRUE, "flat earth" → FALSE)
-- Does NOT connect to real fact-checking databases
+- Uses heuristic keyword matching (e.g., "climate" → TRUE, "flat earth" → FALSE)
+- Optional open-knowledge lookups (Wikipedia/Twitter context) but **no verified fact-checking sources**
 - Does NOT provide accurate or reliable verification
 - Should NOT be used for actual fact-checking
 
@@ -35,7 +41,7 @@ PopFact is a browser extension that demonstrates a CNN-style fact-checking ticke
 - Automatic detection of declarative statements
 - Background processing with intelligent caching
 - Configurable confidence thresholds
-- Uses open knowledge sources (Wikipedia + Twitter context) by default so you can fact-check without private API keys
+- Optional open-knowledge context (Wikipedia + Twitter) with no API keys required, plus a mock provider for fully offline demos
 
 🎛️ **Customizable Settings**
 - Ticker speed control
@@ -53,7 +59,7 @@ PopFact is a browser extension that demonstrates a CNN-style fact-checking ticke
    cd PopFact
    ```
 
-2. **Generate PNG icons** (required):
+2. **PNG icons included** (regenerate only if needed):
 
    See [GENERATE_ICONS.md](GENERATE_ICONS.md) for detailed instructions.
 
@@ -167,11 +173,15 @@ See [DEBUG.md](DEBUG.md) for comprehensive debugging guide.
 
 - Node.js 18+ (for development tools)
 - Chrome or Firefox browser
-- API key for fact-checking service
+- _No API keys required_ for the demo providers
 
-❌ **NOT READY FOR PRODUCTION** - Critical issues must be fixed first.
+❌ **NOT READY FOR PRODUCTION** - Before any store submission:
+- Host `PRIVACY_POLICY.md` at a public URL and reference it in listings.
+- Review and possibly reduce `<all_urls>` permission (currently required for demo coverage).
+- Replace `innerHTML` usage flagged in `content.js` with safer DOM methods.
+- Keep store description aligned with the "Demo" positioning (see `manifest.json`).
 
-PopFact includes a comprehensive QA test suite built with Playwright.
+PopFact includes a comprehensive QA test suite built with Playwright (36 tests across overlay basics, mock fact-checking, performance, and anti-fragility).
 
 **Quick Start:**
 ```bash
@@ -333,7 +343,7 @@ Licensed under the Apache License, Version 2.0
 
 **THIS EXTENSION IS FOR DEMONSTRATION PURPOSES ONLY.**
 
-PopFact uses simple keyword matching and does NOT provide real fact-checking. Results are mock data generated locally and should NOT be considered factual. Always verify important information through authoritative fact-checking sources like Snopes, FactCheck.org, or PolitiFact.
+PopFact uses heuristic keyword matching and lightweight open-knowledge lookups—not verified fact-checking services. Results are mock/demo data and should NOT be considered factual. Always verify important information through authoritative fact-checking sources like Snopes, FactCheck.org, or PolitiFact.
 
 By installing this extension, you acknowledge:
 - Results are mock/demonstration data
@@ -345,4 +355,4 @@ By installing this extension, you acknowledge:
 
 **Made with ❤️ for truth, accuracy, and good UI/UX**
 
-**Status:** Demo/Proof-of-Concept | **Version:** 1.0.0 | **Updated:** 2024-11-18
+**Status:** Demo/Proof-of-Concept | **Version:** 1.0.0 | **Updated:** 2025-11-23
