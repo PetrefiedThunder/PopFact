@@ -11,13 +11,13 @@ import {
   measureMemoryImpact
 } from './utils/performance.ts';
 import { waitForOverlay } from './utils/shadow-dom.ts';
+import { injectExtension } from './utils/inject-extension.ts';
 
 test.describe('PopFact Performance Tests', () => {
   
   test('should load overlay within 200ms performance budget', async ({ page }) => {
-    const startTime = Date.now();
-    
     await page.goto(`file://${process.cwd()}/tests/fixtures/test-page.html`);
+    await injectExtension(page);
     
     // Check if overlay appears within time budget
     const result = await checkOverlayPerformance(page, 200);
