@@ -396,7 +396,8 @@ class MockProvider {
     for (const [category, keywords] of Object.entries(patterns)) {
       if (keywords.some(keyword => lowerClaim.includes(keyword))) {
         verdict = category;
-        confidence = category === 'TRUE' ? 0.9 : category === 'FALSE' ? 0.85 : 0.55;
+        // Confidence represents certainty of the verdict, not truth value
+        confidence = category === 'TRUE' ? 0.9 : category === 'FALSE' ? 0.9 : 0.55;
         break;
       }
     }

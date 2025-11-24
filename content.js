@@ -329,9 +329,8 @@ class PopFactOverlay {
     // Clear existing ticker content safely
     if (!this.tickerScroll) return;
     
-    while (this.tickerScroll.firstChild) {
-      this.tickerScroll.removeChild(this.tickerScroll.firstChild);
-    }
+    // Efficient clearing of all children
+    this.tickerScroll.replaceChildren();
 
     // Process each fact-check result with enhanced display
     this.factResults.forEach(result => {

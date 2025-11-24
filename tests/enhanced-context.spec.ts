@@ -392,11 +392,12 @@ test.describe('PopFact Enhanced Visual Display Tests', () => {
     await expect(badge).toBeVisible();
     await expect(badge).toHaveText('TRUE');
     
-    // Verify badge styling
+    // Verify badge styling - checking for green background
     const bgColor = await badge.evaluate((el) => {
       return window.getComputedStyle(el).backgroundColor;
     });
-    expect(bgColor).toContain('28, 200, 138'); // rgb(28, 200, 138) - green
+    // CSS color #4caf50 = rgb(76, 175, 80)
+    expect(bgColor).toContain('76, 175, 80');
   });
   
   test('should display verdict badge with correct styling for FALSE', async ({ page }) => {
@@ -416,11 +417,12 @@ test.describe('PopFact Enhanced Visual Display Tests', () => {
     await expect(badge).toBeVisible();
     await expect(badge).toHaveText('FALSE');
     
-    // Verify badge styling
+    // Verify badge styling - checking for red color
     const bgColor = await badge.evaluate((el) => {
       return window.getComputedStyle(el).backgroundColor;
     });
-    expect(bgColor).toContain('255, 82, 82'); // rgb(255, 82, 82) - red
+    // CSS color #ff5252 = rgb(255, 82, 82)
+    expect(bgColor).toContain('255, 82, 82');
   });
   
   test('should display verdict badge with correct styling for MIXED', async ({ page }) => {
@@ -440,11 +442,12 @@ test.describe('PopFact Enhanced Visual Display Tests', () => {
     await expect(badge).toBeVisible();
     await expect(badge).toHaveText('MIXED');
     
-    // Verify badge styling
+    // Verify badge styling - checking for yellow/orange background
     const bgColor = await badge.evaluate((el) => {
       return window.getComputedStyle(el).backgroundColor;
     });
-    expect(bgColor).toContain('255, 193, 7'); // rgb(255, 193, 7) - yellow
+    // CSS color #ffb300 = rgb(255, 179, 0)
+    expect(bgColor).toContain('255, 179, 0');
   });
   
   test('should display claim header with verdict badge', async ({ page }) => {
