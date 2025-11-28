@@ -12,12 +12,16 @@ import {
   isOverlayHidden,
   toggleOverlay
 } from './utils/shadow-dom.ts';
+import { injectExtension } from './utils/inject-extension.ts';
 
 test.describe('PopFact Overlay - Basic Functionality', () => {
   
   test('should inject overlay on page load', async ({ page }) => {
     // Navigate to test page
     await page.goto(`file://${process.cwd()}/tests/fixtures/test-page.html`);
+    
+    // Inject extension (simulates extension loading)
+    await injectExtension(page);
     
     // Wait for overlay to appear
     await waitForOverlay(page);
@@ -29,6 +33,7 @@ test.describe('PopFact Overlay - Basic Functionality', () => {
   
   test('should display PopFact branding', async ({ page }) => {
     await page.goto(`file://${process.cwd()}/tests/fixtures/test-page.html`);
+    await injectExtension(page);
     await waitForOverlay(page);
     
     // Check for branding label
@@ -39,6 +44,7 @@ test.describe('PopFact Overlay - Basic Functionality', () => {
   
   test('should have a toggle button', async ({ page }) => {
     await page.goto(`file://${process.cwd()}/tests/fixtures/test-page.html`);
+    await injectExtension(page);
     await waitForOverlay(page);
     
     // Verify toggle button exists
@@ -48,6 +54,7 @@ test.describe('PopFact Overlay - Basic Functionality', () => {
   
   test('should toggle overlay visibility when button is clicked', async ({ page }) => {
     await page.goto(`file://${process.cwd()}/tests/fixtures/test-page.html`);
+    await injectExtension(page);
     await waitForOverlay(page);
     
     // Initially visible
@@ -71,6 +78,7 @@ test.describe('PopFact Overlay - Basic Functionality', () => {
   
   test('should display status indicator', async ({ page }) => {
     await page.goto(`file://${process.cwd()}/tests/fixtures/test-page.html`);
+    await injectExtension(page);
     await waitForOverlay(page);
     
     // Check for status indicator
@@ -81,6 +89,7 @@ test.describe('PopFact Overlay - Basic Functionality', () => {
   
   test('should have ticker scroll container', async ({ page }) => {
     await page.goto(`file://${process.cwd()}/tests/fixtures/test-page.html`);
+    await injectExtension(page);
     await waitForOverlay(page);
     
     // Verify ticker scroll element exists
@@ -90,6 +99,7 @@ test.describe('PopFact Overlay - Basic Functionality', () => {
   
   test('should display loading message initially', async ({ page }) => {
     await page.goto(`file://${process.cwd()}/tests/fixtures/test-page.html`);
+    await injectExtension(page);
     await waitForOverlay(page);
     
     // Check for loading message
@@ -103,6 +113,7 @@ test.describe('PopFact Overlay - Basic Functionality', () => {
   
   test('should not interfere with page scrolling', async ({ page }) => {
     await page.goto(`file://${process.cwd()}/tests/fixtures/test-page.html`);
+    await injectExtension(page);
     await waitForOverlay(page);
     
     // Get initial scroll position
@@ -123,6 +134,7 @@ test.describe('PopFact Overlay - Basic Functionality', () => {
   
   test('should have proper z-index to stay on top', async ({ page }) => {
     await page.goto(`file://${process.cwd()}/tests/fixtures/test-page.html`);
+    await injectExtension(page);
     await waitForOverlay(page);
     
     // Check z-index is very high

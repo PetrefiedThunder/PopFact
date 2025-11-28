@@ -12,6 +12,7 @@ import {
   getFactItems
 } from './utils/shadow-dom.ts';
 import { mockFactCheckResponse } from './utils/network-mocking.ts';
+import { injectExtension } from './utils/inject-extension.ts';
 
 test.describe('PopFact Anti-Fragility - Resilient Operation', () => {
   
@@ -38,6 +39,7 @@ test.describe('PopFact Anti-Fragility - Resilient Operation', () => {
         </body>
       </html>
     `);
+    await injectExtension(page);
     
     // Wait a moment for extension to process
     await page.waitForTimeout(1000);
@@ -60,6 +62,7 @@ test.describe('PopFact Anti-Fragility - Resilient Operation', () => {
         </body>
       </html>
     `);
+    await injectExtension(page);
     
     await page.waitForTimeout(1000);
     
@@ -81,6 +84,7 @@ test.describe('PopFact Anti-Fragility - Resilient Operation', () => {
         </body>
       </html>
     `);
+    await injectExtension(page);
     
     await page.waitForTimeout(1000);
     
@@ -97,6 +101,7 @@ test.describe('PopFact Anti-Fragility - Resilient Operation', () => {
     content += '</body></html>';
     
     await page.setContent(content);
+    await injectExtension(page);
     await page.waitForTimeout(1000);
     
     // Should still load overlay
@@ -143,6 +148,7 @@ test.describe('PopFact Anti-Fragility - Resilient Operation', () => {
           <script>
             setInterval(() => {
               const div = document.getElementById('content');
+    await injectExtension(page);
               if (div) {
                 div.innerHTML = '<p>Updated at ' + Date.now() + ': The sky is blue.</p>';
               }
@@ -170,6 +176,7 @@ test.describe('PopFact Anti-Fragility - Resilient Operation', () => {
         </body>
       </html>
     `);
+    await injectExtension(page);
     
     await page.waitForTimeout(1000);
     
@@ -187,6 +194,7 @@ test.describe('PopFact Anti-Fragility - Resilient Operation', () => {
           <p>Regular content: The sky is blue.</p>
           <script>
             const host = document.getElementById('host');
+    await injectExtension(page);
             const shadow = host.attachShadow({mode: 'open'});
             shadow.innerHTML = '<p>Shadow content: Hidden from main DOM</p>';
           </script>
@@ -266,6 +274,7 @@ test.describe('PopFact Anti-Fragility - Resilient Operation', () => {
           <script>
             document.getElementById('testBtn').addEventListener('click', () => {
               window.testCallback();
+    await injectExtension(page);
             });
           </script>
         </body>

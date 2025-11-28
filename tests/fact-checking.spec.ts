@@ -13,6 +13,7 @@ import {
   waitForLoadingToComplete
 } from './utils/shadow-dom.ts';
 import { mockFactCheckResponse, mockFactCheckResponses } from './utils/network-mocking.ts';
+import { injectExtension } from './utils/inject-extension.ts';
 
 test.describe('PopFact Fact-Checking - Mocked Responses', () => {
   

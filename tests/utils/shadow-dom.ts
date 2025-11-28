@@ -86,7 +86,7 @@ export async function isOverlayHidden(page: Page): Promise<boolean> {
  */
 export async function toggleOverlay(page: Page): Promise<void> {
   const button = getToggleButton(page);
-  await button.click();
+  await button.click({ force: true }); // Force click to bypass overlay interception
 }
 
 /**
