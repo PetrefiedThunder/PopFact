@@ -7,6 +7,7 @@ class PopFactOverlay {
     this.isVisible = true;
     this.tickerPaused = false;
     this.factCheckQueue = [];
+    this.factResults = []; // Store fact check results
     this.processedClaims = new Set();
     this.maxProcessedClaims = 1000; // Prevent unbounded memory growth
     this.observer = null;
@@ -326,19 +327,21 @@ class PopFactOverlay {
   // TASK 3: Update ticker with fact-check results
   updateTicker() {
     // Clear existing ticker content safely
-    while (this.tickerInner.firstChild) {
-      this.tickerInner.removeChild(this.tickerInner.firstChild);
-    }
+    if (!this.tickerScroll) return;
+    
+    // Efficient clearing of all children
+    this.tickerScroll.replaceChildren();
 
-    // Process each fact-check result
+    // Process each fact-check result with enhanced display
     this.factResults.forEach(result => {
-      const { claim, verdict, explanation } = result;
+      const { claim, verdict, explanation, confidence, sources } = result;
       
       // Determine CSS class based on verdict
       let verdictClass = 'popfact-unverified';
       if (verdict === 'TRUE') verdictClass = 'popfact-true';
       else if (verdict === 'FALSE') verdictClass = 'popfact-false';
       else if (verdict === 'MIXED') verdictClass = 'popfact-mixed';
+      else if (verdict === 'ERROR') verdictClass = 'popfact-error';
 
       // Create fact check item using safe DOM methods to prevent XSS
       const factItem = document.createElement('div');
@@ -347,23 +350,48 @@ class PopFactOverlay {
       const icon = document.createElement('span');
       icon.className = 'popfact-item-icon';
       icon.textContent = this.getVerdictIcon(verdict);
+      icon.title = verdict;
 
       const textContainer = document.createElement('span');
       textContainer.className = 'popfact-item-text';
 
+      // Create claim header with verdict badge
+      const claimHeader = document.createElement('span');
+      claimHeader.className = 'popfact-claim-header';
+      
+      const verdictBadge = document.createElement('span');
+      verdictBadge.className = 'popfact-verdict-badge';
+      verdictBadge.textContent = verdict;
+      
       const claimSpan = document.createElement('span');
       claimSpan.className = 'popfact-claim';
-      claimSpan.textContent = this.truncate(claim, 80);
+      claimSpan.textContent = this.truncate(claim, 120);
+      claimSpan.title = claim; // Full claim on hover
+      
+      claimHeader.appendChild(verdictBadge);
+      claimHeader.appendChild(document.createTextNode(' '));
+      claimHeader.appendChild(claimSpan);
 
-      const verdictSpan = document.createElement('span');
-      verdictSpan.className = 'popfact-verdict';
-      verdictSpan.textContent = explanation || verdict;
+      // Create detailed explanation span (no truncation for full context)
+      const explanationSpan = document.createElement('span');
+      explanationSpan.className = 'popfact-explanation';
+      explanationSpan.textContent = explanation || verdict;
+      
+      // Add confidence indicator if available
+      if (confidence !== undefined && confidence > 0) {
+        const confidenceSpan = document.createElement('span');
+        confidenceSpan.className = 'popfact-confidence';
+        confidenceSpan.textContent = ` [Confidence: ${Math.round(confidence * 100)}%]`;
+        explanationSpan.appendChild(confidenceSpan);
+      }
 
-      textContainer.appendChild(claimSpan);
-      textContainer.appendChild(verdictSpan);
+      textContainer.appendChild(claimHeader);
+      textContainer.appendChild(document.createTextNode(' • '));
+      textContainer.appendChild(explanationSpan);
 
       const separator = document.createElement('span');
       separator.className = 'popfact-separator';
+      separator.textContent = ' ▪ ';
 
       factItem.appendChild(icon);
       factItem.appendChild(textContainer);
@@ -391,6 +419,77 @@ class PopFactOverlay {
         this.tickerScroll.appendChild(clone);
       }
     }
+  }
+
+  getVerdictIcon(verdict) {
+    // Return appropriate icon for each verdict type
+    switch (verdict) {
+      case 'TRUE':
+        return '✓';
+      case 'FALSE':
+        return '✗';
+      case 'MIXED':
+        return '⚠';
+      case 'UNVERIFIED':
+        return '?';
+      case 'ERROR':
+        return '⚠';
+      default:
+        return '•';
+    }
+  }
+
+  truncate(text, maxLength) {
+    // Truncate text to maxLength and add ellipsis if needed
+    if (!text) return '';
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+  }
+
+  detectMediaElements() {
+    // Detect video and audio elements on the page
+    if (!document.body) return;
+
+    const mediaElements = document.querySelectorAll('video, audio');
+    if (mediaElements.length > 0) {
+      console.log(`PopFact: Found ${mediaElements.length} media elements (transcription coming soon)`);
+      
+      // Send message to background for future transcription support
+      chrome.runtime.sendMessage({
+        type: 'MEDIA_DETECTED',
+        mediaType: 'video/audio',
+        count: mediaElements.length
+      });
+    }
+  }
+
+  extractSentences(textNodes) {
+    // Extract sentences from text nodes
+    const allText = textNodes.map(node => node.textContent).join(' ');
+    return allText.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
+  }
+
+  filterDeclarativeSentences(sentences) {
+    // Filter for declarative sentences that are likely to contain factual claims
+    return sentences.filter(sentence => {
+      const wordCount = sentence.split(/\s+/).length;
+      // Must have reasonable length and word count
+      if (sentence.length < 40 || sentence.length > 1000 || wordCount < 6) {
+        return false;
+      }
+      
+      // Skip questions
+      if (sentence.includes('?')) {
+        return false;
+      }
+      
+      // Skip first-person narratives (less likely to be factual claims)
+      if (/^(I |We |My |Our )/i.test(sentence)) {
+        return false;
+      }
+      
+      return true;
+    }).slice(0, 10); // Limit to 10 claims to avoid overwhelming the system
   }
 }
 

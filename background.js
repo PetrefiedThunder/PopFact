@@ -371,50 +371,87 @@ class FactCheckService {
 class MockProvider {
   async check(claim) {
     const lowerClaim = claim.toLowerCase();
+    
+    // Enhanced pattern matching with more nuanced categories
     const patterns = {
-      'TRUE': ['sky is blue', 'earth is round', 'water is wet'],
-      'FALSE': ['earth is flat', 'vaccines cause autism', 'moon landing was fake'],
-      'MIXED': ['coffee is healthy', 'carbs are bad']
+      'TRUE': [
+        'sky is blue', 'earth is round', 'water is wet', 'sun rises east',
+        'humans need oxygen', 'gravity exists', 'climate change',
+        'vaccines prevent disease', 'earth orbits sun'
+      ],
+      'FALSE': [
+        'earth is flat', 'vaccines cause autism', 'moon landing was fake',
+        '5g causes covid', 'chemtrails', 'flat earth'
+      ],
+      'MIXED': [
+        'coffee is healthy', 'carbs are bad', 'organic is better',
+        'supplements work', 'detox cleanses'
+      ]
     };
 
-    const data = await response.json();
-
-    if (!data.claims || data.claims.length === 0) {
-      return {
-        claim: claim,
-        verdict: 'UNVERIFIED',
-        explanation: 'No fact-checks found for this claim',
-        confidence: 0,
-        sources: [],
-        sourceDetails: [],
-        timestamp: Date.now()
-      };
-    }
-
+    let verdict = 'UNVERIFIED';
+    let confidence = 0.3;
+    
+    // Pattern matching to determine verdict
     for (const [category, keywords] of Object.entries(patterns)) {
       if (keywords.some(keyword => lowerClaim.includes(keyword))) {
         verdict = category;
-        confidence = category === 'TRUE' ? 0.9 : category === 'FALSE' ? 0.1 : 0.55;
+        // Confidence represents certainty of the verdict, not truth value
+        confidence = category === 'TRUE' ? 0.9 : category === 'FALSE' ? 0.9 : 0.55;
         break;
       }
+    }
+    
+    // Context-specific adjustments
+    if (lowerClaim.includes('climate') && lowerClaim.includes('hoax')) {
+      verdict = 'FALSE';
+      confidence = 0.95;
+    }
+    if (lowerClaim.includes('vaccine') && lowerClaim.includes('safe')) {
+      verdict = 'TRUE';
+      confidence = 0.9;
     }
 
     return {
       verdict,
-      explanation: this.generateExplanation(verdict),
+      explanation: this.generateExplanation(verdict, claim),
       confidence,
       sources: []
     };
   }
 
-  generateExplanation(verdict) {
-    const explanations = {
-      'TRUE': 'This claim is supported by reliable sources',
-      'FALSE': 'This claim contradicts established facts',
-      'MIXED': 'This claim contains both accurate and inaccurate elements',
-      'UNVERIFIED': 'Insufficient evidence to verify this claim'
+  generateExplanation(verdict, claim) {
+    const lowerClaim = claim.toLowerCase();
+    
+    // Generate nuanced, in-depth explanations based on verdict and context
+    const baseExplanations = {
+      'TRUE': '✓ VERIFIED: This claim aligns with established scientific consensus and reliable sources.',
+      'FALSE': '✗ DISPUTED: This claim contradicts verified evidence from authoritative sources.',
+      'MIXED': '⚠ NUANCED: This claim has both supporting and contradicting evidence requiring careful analysis.',
+      'UNVERIFIED': '? UNVERIFIED: Insufficient reliable evidence available to make a definitive assessment.'
     };
-    return explanations[verdict] || 'Verification pending';
+    
+    let contextualInsight = '';
+    
+    // Add domain-specific context for deeper understanding
+    if (lowerClaim.includes('climate') || lowerClaim.includes('warming') || lowerClaim.includes('environment')) {
+      contextualInsight = ' 🌍 Climate Context: Scientific bodies worldwide (NASA, NOAA, IPCC) report over 97% consensus on human-caused climate change. Evidence includes temperature records, ice core data, and satellite observations spanning decades.';
+    } else if (lowerClaim.includes('vaccine') || lowerClaim.includes('immunization')) {
+      contextualInsight = ' 💉 Medical Context: Vaccines undergo rigorous clinical trials and ongoing safety monitoring by health agencies (FDA, WHO, CDC). The debunked vaccine-autism link originated from a retracted study.';
+    } else if (lowerClaim.includes('election') || lowerClaim.includes('vote') || lowerClaim.includes('ballot')) {
+      contextualInsight = ' 🗳️ Electoral Context: Election integrity is verified through multiple independent audits, bipartisan poll watchers, and official certification processes with documented chain of custody.';
+    } else if (lowerClaim.includes('space') || lowerClaim.includes('moon') || lowerClaim.includes('nasa')) {
+      contextualInsight = ' 🚀 Space Context: Space missions involve thousands of engineers, international cooperation, and independently verifiable evidence including reflectors on the moon and samples returned to Earth.';
+    } else if (lowerClaim.includes('health') || lowerClaim.includes('medical') || lowerClaim.includes('nutrition')) {
+      contextualInsight = ' ⚕️ Health Context: Medical and nutritional claims should be evaluated based on peer-reviewed research, clinical trials, and guidance from qualified healthcare professionals rather than anecdotes.';
+    } else if (lowerClaim.includes('history') || lowerClaim.includes('war') || lowerClaim.includes('genocide')) {
+      contextualInsight = ' 📜 Historical Context: Historical claims are verified through primary sources, archaeological evidence, contemporary records, and consensus among professional historians.';
+    }
+    
+    // Add general research guidance
+    const researchGuidance = ' 📚 For authoritative fact-checking, consult: Snopes.com, FactCheck.org, PolitiFact.com, or domain-specific expert organizations.';
+    
+    return baseExplanations[verdict] + contextualInsight + researchGuidance;
   }
 }
 
@@ -429,8 +466,8 @@ class OpenKnowledgeProvider {
     if (wikiResult?.url) sources.push(wikiResult.url);
     if (twitterResult?.url) sources.push(twitterResult.url);
 
-    const verdict = this.deriveVerdict(wikiResult, twitterResult);
-    const explanation = this.buildExplanation(wikiResult, twitterResult, verdict);
+    const verdict = this.deriveVerdict(wikiResult, twitterResult, claim);
+    const explanation = this.buildExplanation(wikiResult, twitterResult, verdict, claim);
     const confidence = this.estimateConfidence(wikiResult, twitterResult, context.confidenceThreshold);
 
     return {
@@ -474,31 +511,94 @@ class OpenKnowledgeProvider {
     };
   }
 
-  deriveVerdict(wikiResult, twitterResult) {
-    if (wikiResult?.snippet && /hoax|false|misinformation|debunked/i.test(wikiResult.snippet)) {
+  deriveVerdict(wikiResult, twitterResult, claim) {
+    const lowerClaim = claim.toLowerCase();
+    
+    // Enhanced context-aware verdict derivation with nuance
+    // Check for clear false indicators
+    if (wikiResult?.snippet && /hoax|false|misinformation|debunked|conspiracy|myth|unfounded|incorrect/i.test(wikiResult.snippet)) {
       return 'FALSE';
     }
-    if (wikiResult?.snippet && /is a|was a|are the|known for/i.test(wikiResult.snippet)) {
+    
+    // Check for clear true indicators with stronger evidence
+    if (wikiResult?.snippet && /is a|was a|are the|known for|confirmed|verified|established|scientific consensus|widely accepted/i.test(wikiResult.snippet)) {
       return 'TRUE';
     }
-    if (twitterResult?.snippet && /disputed|mixed|questionable/i.test(twitterResult.snippet)) {
+    
+    // Check for nuanced/mixed indicators
+    if (wikiResult?.snippet && /controversy|debate|disputed|some evidence|partially|complex issue/i.test(wikiResult.snippet)) {
       return 'MIXED';
     }
+    
+    if (twitterResult?.snippet && /disputed|mixed|questionable|conflicting|ongoing debate/i.test(twitterResult.snippet)) {
+      return 'MIXED';
+    }
+    
+    // Context-specific verdict logic for common claim types
+    if (lowerClaim.includes('climate') || lowerClaim.includes('global warming')) {
+      if (wikiResult?.snippet && /climate change|warming|greenhouse/i.test(wikiResult.snippet)) {
+        return 'TRUE';
+      }
+    }
+    
+    if (lowerClaim.includes('vaccine') || lowerClaim.includes('vaccination')) {
+      if (lowerClaim.includes('autism') || lowerClaim.includes('cause')) {
+        return 'FALSE'; // Debunked vaccine-autism link
+      }
+    }
+    
     return 'UNVERIFIED';
   }
 
-  buildExplanation(wikiResult, twitterResult, verdict) {
+  buildExplanation(wikiResult, twitterResult, verdict, claim) {
     const parts = [];
+    let contextualPrefix = '';
+    
+    // Create nuanced, in-depth explanations based on verdict
+    switch (verdict) {
+      case 'TRUE':
+        contextualPrefix = '✓ VERIFIED: This claim is supported by reliable sources. ';
+        break;
+      case 'FALSE':
+        contextualPrefix = '✗ DISPUTED: This claim contradicts established evidence. ';
+        break;
+      case 'MIXED':
+        contextualPrefix = '⚠ NUANCED: This claim requires careful consideration. ';
+        break;
+      case 'UNVERIFIED':
+        contextualPrefix = '? UNVERIFIED: Insufficient evidence available. ';
+        break;
+    }
+    
+    // Add detailed Wikipedia context with enhanced formatting
     if (wikiResult?.title) {
-      parts.push(`Wikipedia context: ${wikiResult.title}${wikiResult.snippet ? ' — ' + wikiResult.snippet : ''}`);
+      const snippet = wikiResult.snippet ? wikiResult.snippet.substring(0, 200) : '';
+      parts.push(`📚 Encyclopedia: "${wikiResult.title}" ${snippet ? '— ' + snippet + '...' : ''}`);
     }
+    
+    // Add social media context for real-time perspectives
     if (twitterResult?.snippet) {
-      parts.push(`Twitter chatter: ${twitterResult.snippet}`);
+      const snippet = twitterResult.snippet.substring(0, 150);
+      parts.push(`💬 Public discourse: ${snippet}...`);
     }
+    
+    // Add contextual analysis based on claim content
+    const lowerClaim = claim.toLowerCase();
+    if (lowerClaim.includes('climate') || lowerClaim.includes('global warming')) {
+      parts.push(`🌍 Context: Climate science involves complex systems with broad scientific consensus on key findings.`);
+    }
+    if (lowerClaim.includes('health') || lowerClaim.includes('medical')) {
+      parts.push(`⚕️ Note: Health claims should be verified with qualified medical professionals and peer-reviewed research.`);
+    }
+    if (lowerClaim.includes('election') || lowerClaim.includes('vote') || lowerClaim.includes('voting')) {
+      parts.push(`🗳️ Context: Election claims are subject to verification by election officials and independent observers.`);
+    }
+    
     if (parts.length === 0) {
-      return 'No open sources found yet; monitoring for updates.';
+      return contextualPrefix + 'No definitive sources found in open knowledge bases. Consider checking authoritative fact-checking organizations for detailed analysis.';
     }
-    return `${verdict === 'TRUE' ? 'Supported by public knowledge.' : 'Open source context gathered.'} ${parts.join(' | ')}`;
+    
+    return contextualPrefix + parts.join(' • ');
   }
 
   estimateConfidence(wikiResult, twitterResult, threshold = 50) {

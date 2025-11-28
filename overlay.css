@@ -1,19 +1,20 @@
-/* PopFact CNN-Style Bottom Ticker */
+/* PopFact CNN-Style Bottom Ticker with Enhanced Context Display */
 
 #popfact-overlay {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 80px;
-  background: linear-gradient(to top, rgba(8, 12, 22, 0.72), rgba(8, 12, 22, 0.55));
-  border-top: 3px solid rgba(255, 107, 53, 0.65);
+  height: 100px;  /* Increased height for detailed context */
+  background: linear-gradient(to top, rgba(8, 12, 22, 0.85), rgba(8, 12, 22, 0.65));
+  border-top: 3px solid rgba(255, 107, 53, 0.75);
   z-index: 2147483647;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   overflow: hidden;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.6);
   transition: transform 0.3s ease-in-out;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px);
+  color: #ffffff;
 }
 
 #popfact-overlay.hidden {
@@ -27,19 +28,55 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 14px;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.6);
+  padding: 8px 0;
 }
 
 .popfact-ticker-label {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 120px;
-  background: rgba(255, 107, 53, 0.8);
+  flex: 0 0 auto;
+  padding: 0 16px;
+  background: rgba(255, 107, 53, 0.9);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  height: 100%;
   display: flex;
   align-items: center;
-  width: 100%;
+  justify-content: center;
+  font-size: 16px;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  border-right: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.popfact-ticker-content {
+  flex: 1;
+  overflow: hidden;
   height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+}
+
+#popfact-ticker-scroll {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  animation: scroll-ticker 60s linear infinite;
+  gap: 40px;
+}
+
+#popfact-ticker-scroll.paused {
+  animation-play-state: paused;
+  opacity: 0.85;
+}
+
+@keyframes scroll-ticker {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
 }
 
 .popfact-brand {
@@ -70,18 +107,124 @@
 
 .popfact-item {
   display: inline-flex;
+  align-items: flex-start;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  margin-right: 0;
+  max-width: 900px;
+  line-height: 1.4;
+  backdrop-filter: blur(5px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.popfact-item-icon {
+  font-size: 20px;
+  font-weight: bold;
+  margin-right: 12px;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.popfact-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.popfact-claim-header {
+  display: flex;
   align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
 }
 
-#popfact-ticker-inner {
-  display: inline-flex;
-  white-space: nowrap;
-  animation: popfact-scroll 25s linear infinite;
-}
-
-.popfact-item {
-  margin-right: 40px;
+.popfact-verdict-badge {
   display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.popfact-true .popfact-verdict-badge {
+  background: rgba(76, 175, 80, 0.3);
+  color: #4caf50;
+  border: 1px solid rgba(76, 175, 80, 0.5);
+}
+
+.popfact-false .popfact-verdict-badge {
+  background: rgba(244, 67, 54, 0.3);
+  color: #ff5252;
+  border: 1px solid rgba(244, 67, 54, 0.5);
+}
+
+.popfact-mixed .popfact-verdict-badge {
+  background: rgba(255, 179, 0, 0.3);
+  color: #ffb300;
+  border: 1px solid rgba(255, 179, 0, 0.5);
+}
+
+.popfact-unverified .popfact-verdict-badge {
+  background: rgba(176, 190, 197, 0.3);
+  color: #b0bec5;
+  border: 1px solid rgba(176, 190, 197, 0.5);
+}
+
+.popfact-error .popfact-verdict-badge {
+  background: rgba(255, 152, 0, 0.3);
+  color: #ff9800;
+  border: 1px solid rgba(255, 152, 0, 0.5);
+}
+
+.popfact-claim {
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.popfact-explanation {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: normal;
+  word-wrap: break-word;
+  max-width: 850px;
+}
+
+.popfact-confidence {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  font-style: italic;
+  margin-left: 8px;
+}
+
+.popfact-separator {
+  color: rgba(255, 255, 255, 0.4);
+  margin: 0 16px;
+  font-size: 16px;
+}
+
+.popfact-loading {
+  color: rgba(255, 255, 255, 0.7);
+  font-style: italic;
+  padding: 8px 16px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .popfact-true {
@@ -102,12 +245,24 @@
 
 .popfact-status {
   flex: 0 0 auto;
-  padding: 0 12px;
-  font-size: 12px;
-  opacity: 0.8;
+  padding: 0 16px;
+  font-size: 11px;
+  opacity: 0.9;
   height: 100%;
   display: flex;
   align-items: center;
+  gap: 8px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.popfact-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4caf50;
+  animation: status-pulse 2s ease-in-out infinite;
+  flex-shrink: 0;
 }
 
 .popfact-status-dot.paused {
@@ -115,24 +270,46 @@
   animation-play-state: paused;
 }
 
+@keyframes status-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
 .popfact-status-text {
   letter-spacing: 0.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
 }
 
 .popfact-flow-toggle {
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 14px;
-  padding: 4px 10px;
+  padding: 5px 12px;
   font-size: 11px;
   cursor: pointer;
   transition: all 0.2s ease;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 .popfact-flow-toggle:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.22);
   transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.popfact-flow-toggle:active {
+  transform: translateY(0);
 }
 
 @keyframes pulse {
@@ -142,4 +319,36 @@
   100% {
     transform: translateX(-50%);
   }
+}
+
+/* Toggle button for showing/hiding overlay */
+#popfact-toggle {
+  position: fixed;
+  bottom: 100px;
+  right: 20px;
+  z-index: 2147483648;
+  background: rgba(255, 107, 53, 0.9);
+  color: #ffffff;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+#popfact-toggle:hover {
+  background: rgba(255, 107, 53, 1);
+  transform: scale(1.1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+}
+
+#popfact-toggle.overlay-hidden {
+  bottom: 20px;
 }
