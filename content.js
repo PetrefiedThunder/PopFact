@@ -320,8 +320,71 @@ class PopFactOverlay {
       if (message.type === 'FACT_CHECK_RESULT') {
         this.factResults.push(message.data);
         this.updateTicker();
+      } else if (message.type === 'SCAN_REPOSITORY') {
+        // Handle repository scanning request from popup
+        const claims = this.scanRepositoryContent();
+        sendResponse({ claims: claims });
+        return true; // Keep channel open for async response
       }
     });
+  }
+
+  // Scan repository content for fact-checkable claims
+  scanRepositoryContent() {
+    const claims = [];
+    
+    // Look for README content on GitHub
+    const readmeContent = document.querySelector('[data-target="readme-toc.content"]') ||
+                         document.querySelector('.markdown-body') ||
+                         document.querySelector('[itemprop="text"]') ||
+                         document.querySelector('.Box-body');
+    
+    if (readmeContent) {
+      // Extract text from README paragraphs and headers
+      const elements = readmeContent.querySelectorAll('p, h1, h2, h3, li');
+      let allText = '';
+      
+      elements.forEach(el => {
+        // Skip code blocks and navigation elements
+        if (el.closest('pre') || el.closest('code') || el.closest('nav')) return;
+        allText += ' ' + el.textContent;
+      });
+      
+      // Extract declarative sentences
+      const sentences = allText.split(/[.!?]+/);
+      
+      for (const sentence of sentences) {
+        const trimmed = sentence.trim();
+        const wordCount = trimmed.split(/\s+/).length;
+        
+        // Filter for meaningful declarative statements
+        if (trimmed.length > 40 && trimmed.length < 500 && wordCount > 6) {
+          // Skip questions, commands, and first-person narratives
+          if (trimmed.includes('?')) continue;
+          if (/^(I |We |My |Our |You |Please |Note:|Warning:|Tip:)/i.test(trimmed)) continue;
+          
+          // Skip code-like content
+          if (trimmed.includes('npm ') || trimmed.includes('git ') || trimmed.includes('import ')) continue;
+          if (trimmed.match(/^[a-z]+\([^)]*\)/)) continue; // function calls
+          
+          claims.push(trimmed);
+        }
+        
+        // Limit to 20 claims
+        if (claims.length >= 20) break;
+      }
+    }
+    
+    // Also check description meta tag
+    const description = document.querySelector('meta[name="description"]');
+    if (description && description.content && description.content.length > 40) {
+      const descText = description.content.trim();
+      if (descText.length > 40 && descText.split(/\s+/).length > 6 && claims.length < 20) {
+        claims.unshift(descText);
+      }
+    }
+    
+    return claims;
   }
 
   // TASK 3: Update ticker with fact-check results

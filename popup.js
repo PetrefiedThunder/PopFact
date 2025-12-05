@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadSettings();
   setupEventListeners();
   updateStatus();
+  checkGitHubPage();
 });
 
 function loadSettings() {
@@ -55,6 +56,10 @@ function setupEventListeners() {
 
   // Send wrap-up email button
   document.getElementById('send-wrapup').addEventListener('click', sendWrapUpEmail);
+
+  // GitHub integration buttons
+  document.getElementById('scan-repo').addEventListener('click', scanRepository);
+  document.getElementById('create-issue').addEventListener('click', createGitHubIssue);
 
   // Confidence threshold slider
   document.getElementById('confidence-threshold').addEventListener('input', (e) => {
@@ -186,4 +191,170 @@ function updateStatus() {
       document.getElementById('claims-count').textContent = data.claimsChecked || 0;
     });
   }, 5000);
+}
+
+// GitHub Integration Functions
+
+// Store current repo data and scan results
+let currentRepoData = null;
+let scanResults = [];
+
+function checkGitHubPage() {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (!tabs[0] || !tabs[0].url) return;
+
+    const url = tabs[0].url;
+    const repoInfo = parseGitHubUrl(url);
+
+    if (repoInfo) {
+      currentRepoData = repoInfo;
+      showGitHubSection(repoInfo);
+    }
+  });
+}
+
+function parseGitHubUrl(url) {
+  // Match GitHub repository URLs
+  const match = url.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)/);
+  if (!match) return null;
+
+  const owner = match[1];
+  const repo = match[2].replace(/\.git$/, '').split('#')[0].split('?')[0];
+
+  // Skip non-repo pages
+  if (['settings', 'orgs', 'notifications', 'marketplace', 'explore', 'topics', 'trending', 'collections', 'sponsors', 'login', 'signup'].includes(owner)) {
+    return null;
+  }
+
+  return { owner, repo, url };
+}
+
+function showGitHubSection(repoInfo) {
+  const githubSection = document.getElementById('github-section');
+  const repoInfoDiv = document.getElementById('github-repo-info');
+
+  if (githubSection && repoInfoDiv) {
+    githubSection.style.display = 'block';
+    repoInfoDiv.innerHTML = `
+      <div class="repo-name">${escapeHtml(repoInfo.owner)}/${escapeHtml(repoInfo.repo)}</div>
+      <div class="repo-description">Ready to scan repository content for fact-checkable claims</div>
+    `;
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function scanRepository() {
+  if (!currentRepoData) {
+    alert('No GitHub repository detected.');
+    return;
+  }
+
+  const scanBtn = document.getElementById('scan-repo');
+  const originalText = scanBtn.textContent;
+  scanBtn.textContent = 'Scanning...';
+  scanBtn.disabled = true;
+
+  // Send message to content script to scan the page
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (!tabs[0]) return;
+
+    chrome.tabs.sendMessage(tabs[0].id, { type: 'SCAN_REPOSITORY' }, (response) => {
+      scanBtn.textContent = originalText;
+      scanBtn.disabled = false;
+
+      if (chrome.runtime.lastError) {
+        alert('Error scanning repository. Make sure the page is fully loaded.');
+        return;
+      }
+
+      if (response && response.claims && response.claims.length > 0) {
+        scanResults = response.claims;
+        showScanResults(response.claims);
+        document.getElementById('create-issue').style.display = 'block';
+      } else {
+        alert('No fact-checkable claims found in this repository.');
+        scanResults = [];
+        document.getElementById('create-issue').style.display = 'none';
+      }
+    });
+  });
+}
+
+function showScanResults(claims) {
+  const repoInfoDiv = document.getElementById('github-repo-info');
+  if (!repoInfoDiv || !currentRepoData) return;
+
+  const claimsHtml = claims.slice(0, 5).map((claim, i) => {
+    const truncated = claim.length > 100 ? claim.substring(0, 100) + '...' : claim;
+    return `<div style="font-size: 11px; color: #555; margin: 4px 0; padding: 4px; background: #f9f9f9; border-radius: 3px;">${i + 1}. ${escapeHtml(truncated)}</div>`;
+  }).join('');
+
+  repoInfoDiv.innerHTML = `
+    <div class="repo-name">${escapeHtml(currentRepoData.owner)}/${escapeHtml(currentRepoData.repo)}</div>
+    <div class="repo-description">Found ${claims.length} potential claims:</div>
+    ${claimsHtml}
+    ${claims.length > 5 ? `<div style="font-size: 11px; color: #888;">...and ${claims.length - 5} more</div>` : ''}
+  `;
+}
+
+function createGitHubIssue() {
+  if (!currentRepoData || scanResults.length === 0) {
+    alert('No scan results available. Please scan the repository first.');
+    return;
+  }
+
+  // Get fact-check results from storage
+  chrome.storage.local.get({ factCheckLog: [] }, (data) => {
+    const recentChecks = (data.factCheckLog || []).slice(0, 10);
+    
+    // Build issue body
+    const issueTitle = 'PopFact: Fact-Check Findings for Repository Content';
+    
+    let issueBody = `## PopFact Automated Fact-Check Report\n\n`;
+    issueBody += `**Repository:** ${currentRepoData.owner}/${currentRepoData.repo}\n`;
+    issueBody += `**Scanned:** ${new Date().toISOString()}\n\n`;
+    issueBody += `---\n\n`;
+    issueBody += `### Summary\n\n`;
+    issueBody += `PopFact identified **${scanResults.length}** potential factual claims in this repository's content.\n\n`;
+
+    if (recentChecks.length > 0) {
+      issueBody += `### Recent Fact-Check Results\n\n`;
+      issueBody += `| Claim | Verdict | Confidence |\n`;
+      issueBody += `|-------|---------|------------|\n`;
+      
+      recentChecks.forEach((check) => {
+        const claimText = (check.claim || '').substring(0, 60).replace(/\|/g, '\\|');
+        const verdict = check.verdict || 'UNVERIFIED';
+        const confidence = check.confidence ? `${Math.round(check.confidence * 100)}%` : 'N/A';
+        issueBody += `| ${claimText}... | ${verdict} | ${confidence} |\n`;
+      });
+      
+      issueBody += `\n`;
+    }
+
+    issueBody += `### Claims Found\n\n`;
+    scanResults.slice(0, 10).forEach((claim, i) => {
+      const truncated = claim.length > 200 ? claim.substring(0, 200) + '...' : claim;
+      issueBody += `${i + 1}. ${truncated}\n`;
+    });
+
+    if (scanResults.length > 10) {
+      issueBody += `\n*...and ${scanResults.length - 10} more claims*\n`;
+    }
+
+    issueBody += `\n---\n\n`;
+    issueBody += `> ⚠️ **Note:** This is an automated report from PopFact browser extension. `;
+    issueBody += `Results are based on heuristic analysis and should be verified manually. `;
+    issueBody += `PopFact is a demonstration tool and does not provide authoritative fact-checking.\n`;
+
+    // Open GitHub new issue page with pre-filled content
+    const newIssueUrl = `https://github.com/${encodeURIComponent(currentRepoData.owner)}/${encodeURIComponent(currentRepoData.repo)}/issues/new?title=${encodeURIComponent(issueTitle)}&body=${encodeURIComponent(issueBody)}`;
+    
+    chrome.tabs.create({ url: newIssueUrl });
+  });
 }

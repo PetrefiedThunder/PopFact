@@ -11,8 +11,8 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests',
   
-  /* Test match pattern - by default only run smoke tests */
-  testMatch: process.env.RUN_EXTENSION_TESTS ? '**/*.spec.ts' : '**/smoke.spec.ts',
+  /* Test match pattern - by default only run smoke tests and github-integration tests */
+  testMatch: process.env.RUN_EXTENSION_TESTS ? '**/*.spec.ts' : ['**/smoke.spec.ts', '**/github-integration.spec.ts'],
   
   /* Run tests in files in parallel */
   fullyParallel: true,
