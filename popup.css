@@ -115,6 +115,51 @@ h2 {
   font-style: italic;
 }
 
+.source-credibility-section {
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.github-section {
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #f0f8ff;
+}
+
+.repo-info {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 10px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.repo-info .repo-name {
+  font-weight: 600;
+  color: #0366d6;
+}
+
+.repo-info .repo-description {
+  color: #666;
+  font-size: 12px;
+  margin-top: 5px;
+}
+
+#credibility-value {
+  min-width: 40px;
+  text-align: right;
+  font-weight: 600;
+  color: #ff6b35;
+}
+
+.setting-hint {
+  font-size: 11px;
+  color: #888;
+  margin-top: 4px;
+  margin-left: 28px;
+}
+
 .btn-primary,
 .btn-secondary {
   width: 100%;
