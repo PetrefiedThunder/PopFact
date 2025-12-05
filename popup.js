@@ -328,7 +328,8 @@ function createGitHubIssue() {
       issueBody += `|-------|---------|------------|\n`;
       
       recentChecks.forEach((check) => {
-        const claimText = (check.claim || '').substring(0, 60).replace(/\|/g, '\\|');
+        // Escape both backslashes and pipes for Markdown table safety
+        const claimText = (check.claim || '').substring(0, 60).replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
         const verdict = check.verdict || 'UNVERIFIED';
         const confidence = check.confidence ? `${Math.round(check.confidence * 100)}%` : 'N/A';
         issueBody += `| ${claimText}... | ${verdict} | ${confidence} |\n`;
