@@ -1,0 +1,143 @@
+%% PopFact Codebase Architecture Diagram
+%% Generated: 2026-01-13
+
+graph TB
+    subgraph "Chrome Extension"
+        manifest[manifest.json<br/>Hub - Coupling: 75]
+
+        subgraph "Background Context"
+            bg[background.js<br/>613 LOC - Risk: HIGH]
+            fcs[FactCheckService]
+            mp[MockProvider]
+            okp[OpenKnowledgeProvider]
+            bg --> fcs
+            bg --> mp
+            bg --> okp
+        end
+
+        subgraph "Content Script Context"
+            content[content.js<br/>504 LOC - Risk: HIGH]
+            pfo[PopFactOverlay]
+            content --> pfo
+        end
+
+        subgraph "Popup Context"
+            popup_html[popup.html]
+            popup_js[popup.js<br/>190 LOC]
+            popup_css[popup.css]
+            popup_html --> popup_js
+            popup_html --> popup_css
+        end
+
+        subgraph "Resources"
+            overlay_css[overlay.css<br/>355 LOC]
+            disclaimer[disclaimer.html]
+            icons[icons/*.png]
+        end
+
+        manifest -->|service_worker| bg
+        manifest -->|content_scripts| content
+        manifest -->|content_scripts| overlay_css
+        manifest -->|action| popup_html
+        manifest -->|web_accessible| disclaimer
+        manifest -->|icons| icons
+    end
+
+    subgraph "Chrome APIs"
+        runtime[chrome.runtime]
+        storage[chrome.storage]
+        tabs[chrome.tabs]
+    end
+
+    subgraph "External APIs"
+        wiki[Wikipedia API]
+        jina[Jina/Twitter]
+    end
+
+    bg <-->|onMessage| runtime
+    bg -->|sendMessage| tabs
+    bg <-->|sync/local| storage
+    content -->|sendMessage| runtime
+    content <-->|onMessage| runtime
+    popup_js <-->|sync/local| storage
+    popup_js -->|sendMessage| runtime
+
+    okp -->|fetch| wiki
+    okp -->|fetch| jina
+
+    subgraph "Test Infrastructure"
+        subgraph "Test Files"
+            smoke[smoke.spec.ts]
+            ext_spec[extension.spec.ts<br/>524 LOC]
+            ext_val[extension-validation.spec.ts]
+            overlay_spec[overlay-basic.spec.ts]
+            fact_spec[fact-checking.spec.ts]
+            anti_spec[anti-fragility.spec.ts]
+            enhanced[enhanced-context.spec.ts<br/>750 LOC]
+            perf_spec[performance.spec.ts]
+        end
+
+        subgraph "Test Utilities"
+            shadow[shadow-dom.ts<br/>Hub - 5 importers]
+            inject[inject-extension.ts<br/>4 importers]
+            network[network-mocking.ts]
+            perf_util[performance.ts]
+        end
+
+        subgraph "Test Fixtures"
+            fixtures[extension-fixtures.ts<br/>ORPHAN]
+            test_page[test-page.html]
+        end
+
+        overlay_spec --> shadow
+        overlay_spec --> inject
+        fact_spec --> shadow
+        fact_spec --> network
+        fact_spec --> inject
+        anti_spec --> shadow
+        anti_spec --> network
+        anti_spec --> inject
+        enhanced --> shadow
+        enhanced --> network
+        perf_spec --> shadow
+        perf_spec --> inject
+        perf_spec --> perf_util
+
+        inject -.->|reads| content
+        inject -.->|reads| overlay_css
+
+        smoke --> test_page
+        overlay_spec --> test_page
+        fact_spec --> test_page
+        anti_spec --> test_page
+        enhanced --> test_page
+        perf_spec --> test_page
+    end
+
+    subgraph "Build/Config"
+        pkg[package.json]
+        tsconfig[tsconfig.json]
+        playwright[playwright.config.ts]
+    end
+
+    pkg -->|devDependencies| playwright
+    tsconfig -->|include| Test_Files
+
+    %% Message Flow
+    content -.->|FACT_CHECK_REQUEST| bg
+    bg -.->|FACT_CHECK_RESULT| content
+    popup_js -.->|CLEAR_CACHE| bg
+    popup_js -.->|UPDATE_SETTINGS| bg
+
+    classDef critical fill:#ff6b6b,stroke:#c0392b,color:#fff
+    classDef high fill:#ffa726,stroke:#f57c00,color:#fff
+    classDef medium fill:#ffee58,stroke:#f9a825,color:#333
+    classDef low fill:#81c784,stroke:#388e3c,color:#fff
+    classDef orphan fill:#b0bec5,stroke:#607d8b,color:#333
+    classDef hub fill:#7986cb,stroke:#3949ab,color:#fff
+
+    class manifest critical
+    class bg,content high
+    class overlay_css,ext_spec,enhanced medium
+    class fixtures orphan
+    class shadow,inject hub

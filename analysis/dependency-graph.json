@@ -1,0 +1,489 @@
+{
+  "metadata": {
+    "generated": "2026-01-13",
+    "codebase": "PopFact",
+    "total_files": 69,
+    "source_files": 19,
+    "test_files": 13,
+    "documentation_files": 23,
+    "configuration_files": 6
+  },
+  "external_dependencies": {
+    "npm": {
+      "@playwright/test": "^1.56.1",
+      "@types/node": "^24.10.1",
+      "typescript": "^5.9.3"
+    },
+    "browser_apis": [
+      "chrome.runtime.onMessage",
+      "chrome.runtime.sendMessage",
+      "chrome.storage.sync",
+      "chrome.storage.local",
+      "chrome.tabs.sendMessage",
+      "chrome.storage.onChanged"
+    ]
+  },
+  "files": {
+    "background.js": {
+      "path": "/home/user/PopFact/background.js",
+      "type": "service_worker",
+      "lines": 613,
+      "imports": [],
+      "imported_by": [
+        "manifest.json",
+        "tests/extension.spec.ts",
+        "tests/extension-validation.spec.ts"
+      ],
+      "external_deps": [
+        "chrome.runtime.onMessage",
+        "chrome.storage.sync",
+        "chrome.storage.local",
+        "chrome.storage.onChanged",
+        "chrome.tabs.sendMessage"
+      ],
+      "exports": [
+        "FactCheckService (class)",
+        "MockProvider (class)",
+        "OpenKnowledgeProvider (class)",
+        "TRUSTED_SOURCES (const)",
+        "ACADEMIC_DOMAINS (const)"
+      ],
+      "side_effects": [
+        "new FactCheckService() - instantiated on load",
+        "console.log('PopFact Background Service: Initialized')"
+      ],
+      "coupling_score": 35,
+      "notes": "Main business logic. Handles fact-checking, caching, rate limiting."
+    },
+    "content.js": {
+      "path": "/home/user/PopFact/content.js",
+      "type": "content_script",
+      "lines": 504,
+      "imports": [],
+      "imported_by": [
+        "manifest.json",
+        "tests/utils/inject-extension.ts"
+      ],
+      "external_deps": [
+        "chrome.runtime.sendMessage",
+        "chrome.runtime.onMessage",
+        "document.body",
+        "MutationObserver",
+        "document.createTreeWalker"
+      ],
+      "exports": [
+        "PopFactOverlay (class)"
+      ],
+      "side_effects": [
+        "new PopFactOverlay() - instantiated on DOMContentLoaded",
+        "document.body.appendChild(overlay)",
+        "document.body.appendChild(toggleBtn)"
+      ],
+      "coupling_score": 45,
+      "notes": "Injects overlay into web pages. High DOM coupling."
+    },
+    "popup.js": {
+      "path": "/home/user/PopFact/popup.js",
+      "type": "popup_script",
+      "lines": 190,
+      "imports": [],
+      "imported_by": [
+        "popup.html"
+      ],
+      "external_deps": [
+        "chrome.storage.sync",
+        "chrome.storage.local",
+        "chrome.runtime.sendMessage",
+        "chrome.tabs.create"
+      ],
+      "exports": [
+        "loadSettings (function)",
+        "saveSettings (function)",
+        "clearCache (function)",
+        "viewStats (function)",
+        "sendWrapUpEmail (function)",
+        "updateStatus (function)"
+      ],
+      "side_effects": [
+        "document.addEventListener('DOMContentLoaded', ...)"
+      ],
+      "coupling_score": 25,
+      "notes": "Extension popup UI logic. Clean separation."
+    },
+    "overlay.css": {
+      "path": "/home/user/PopFact/overlay.css",
+      "type": "stylesheet",
+      "lines": 355,
+      "imports": [],
+      "imported_by": [
+        "manifest.json",
+        "tests/utils/inject-extension.ts",
+        "tests/extension-validation.spec.ts"
+      ],
+      "exports": [
+        "#popfact-overlay",
+        ".popfact-ticker-container",
+        ".popfact-ticker-label",
+        ".popfact-item",
+        ".popfact-true/.popfact-false/.popfact-mixed/.popfact-unverified",
+        "#popfact-toggle",
+        "@keyframes scroll-ticker"
+      ],
+      "coupling_score": 30,
+      "notes": "CNN-style ticker styling. Animation definitions."
+    },
+    "popup.css": {
+      "path": "/home/user/PopFact/popup.css",
+      "type": "stylesheet",
+      "lines": 172,
+      "imports": [],
+      "imported_by": [
+        "popup.html"
+      ],
+      "exports": [
+        ".popup-container",
+        ".header",
+        ".settings-section",
+        ".btn-primary/.btn-secondary"
+      ],
+      "coupling_score": 10,
+      "notes": "Popup-only styling. Low coupling."
+    },
+    "popup.html": {
+      "path": "/home/user/PopFact/popup.html",
+      "type": "html",
+      "lines": 144,
+      "imports": [
+        "popup.css",
+        "popup.js"
+      ],
+      "imported_by": [
+        "manifest.json"
+      ],
+      "exports": [],
+      "coupling_score": 15,
+      "notes": "Extension popup markup."
+    },
+    "disclaimer.html": {
+      "path": "/home/user/PopFact/disclaimer.html",
+      "type": "html",
+      "lines": 138,
+      "imports": [],
+      "imported_by": [
+        "manifest.json (web_accessible_resources)"
+      ],
+      "exports": [],
+      "coupling_score": 5,
+      "notes": "Standalone disclaimer page. Minimal coupling."
+    },
+    "manifest.json": {
+      "path": "/home/user/PopFact/manifest.json",
+      "type": "config",
+      "lines": 54,
+      "imports": [
+        "background.js",
+        "content.js",
+        "overlay.css",
+        "popup.html",
+        "disclaimer.html",
+        "icons/icon16.png",
+        "icons/icon48.png",
+        "icons/icon128.png"
+      ],
+      "imported_by": [],
+      "exports": [],
+      "coupling_score": 75,
+      "notes": "Extension manifest. Hub file - connects all components."
+    },
+    "playwright.config.ts": {
+      "path": "/home/user/PopFact/playwright.config.ts",
+      "type": "config",
+      "lines": 57,
+      "imports": [
+        "@playwright/test"
+      ],
+      "imported_by": [],
+      "exports": [
+        "default config"
+      ],
+      "coupling_score": 20,
+      "notes": "Test configuration."
+    },
+    "tests/smoke.spec.ts": {
+      "path": "/home/user/PopFact/tests/smoke.spec.ts",
+      "type": "test",
+      "lines": 79,
+      "imports": [
+        "@playwright/test"
+      ],
+      "imported_by": [],
+      "exports": [],
+      "coupling_score": 15,
+      "notes": "Infrastructure validation tests."
+    },
+    "tests/extension.spec.ts": {
+      "path": "/home/user/PopFact/tests/extension.spec.ts",
+      "type": "test",
+      "lines": 524,
+      "imports": [
+        "@playwright/test",
+        "path",
+        "../manifest.json"
+      ],
+      "imported_by": [],
+      "exports": [],
+      "coupling_score": 40,
+      "notes": "Full extension test suite. High LOC."
+    },
+    "tests/extension-validation.spec.ts": {
+      "path": "/home/user/PopFact/tests/extension-validation.spec.ts",
+      "type": "test",
+      "lines": 226,
+      "imports": [
+        "@playwright/test",
+        "path",
+        "fs",
+        "../manifest.json"
+      ],
+      "imported_by": [],
+      "exports": [],
+      "coupling_score": 35,
+      "notes": "Static validation tests."
+    },
+    "tests/overlay-basic.spec.ts": {
+      "path": "/home/user/PopFact/tests/overlay-basic.spec.ts",
+      "type": "test",
+      "lines": 150,
+      "imports": [
+        "@playwright/test",
+        "./utils/shadow-dom.ts",
+        "./utils/inject-extension.ts"
+      ],
+      "imported_by": [],
+      "exports": [],
+      "coupling_score": 30,
+      "notes": "Overlay functionality tests."
+    },
+    "tests/fact-checking.spec.ts": {
+      "path": "/home/user/PopFact/tests/fact-checking.spec.ts",
+      "type": "test",
+      "lines": 199,
+      "imports": [
+        "@playwright/test",
+        "./utils/shadow-dom.ts",
+        "./utils/network-mocking.ts",
+        "./utils/inject-extension.ts"
+      ],
+      "imported_by": [],
+      "exports": [],
+      "coupling_score": 35,
+      "notes": "Fact-checking integration tests."
+    },
+    "tests/anti-fragility.spec.ts": {
+      "path": "/home/user/PopFact/tests/anti-fragility.spec.ts",
+      "type": "test",
+      "lines": 298,
+      "imports": [
+        "@playwright/test",
+        "./utils/shadow-dom.ts",
+        "./utils/network-mocking.ts",
+        "./utils/inject-extension.ts"
+      ],
+      "imported_by": [],
+      "exports": [],
+      "coupling_score": 30,
+      "notes": "Resilience tests for edge cases."
+    },
+    "tests/enhanced-context.spec.ts": {
+      "path": "/home/user/PopFact/tests/enhanced-context.spec.ts",
+      "type": "test",
+      "lines": 750,
+      "imports": [
+        "@playwright/test",
+        "./utils/shadow-dom.ts",
+        "./utils/network-mocking.ts"
+      ],
+      "imported_by": [],
+      "exports": [],
+      "coupling_score": 35,
+      "notes": "Largest test file. Context understanding tests."
+    },
+    "tests/performance.spec.ts": {
+      "path": "/home/user/PopFact/tests/performance.spec.ts",
+      "type": "test",
+      "lines": 177,
+      "imports": [
+        "@playwright/test",
+        "./utils/performance.ts",
+        "./utils/shadow-dom.ts",
+        "./utils/inject-extension.ts"
+      ],
+      "imported_by": [],
+      "exports": [],
+      "coupling_score": 25,
+      "notes": "Performance budget tests."
+    },
+    "tests/utils/inject-extension.ts": {
+      "path": "/home/user/PopFact/tests/utils/inject-extension.ts",
+      "type": "utility",
+      "lines": 95,
+      "imports": [
+        "@playwright/test",
+        "fs",
+        "path",
+        "content.js (reads file)",
+        "overlay.css (reads file)"
+      ],
+      "imported_by": [
+        "tests/overlay-basic.spec.ts",
+        "tests/fact-checking.spec.ts",
+        "tests/anti-fragility.spec.ts",
+        "tests/performance.spec.ts"
+      ],
+      "exports": [
+        "injectExtension",
+        "getMessages",
+        "sendMessageToContent",
+        "clearMessages"
+      ],
+      "coupling_score": 55,
+      "notes": "Hub utility for test injection. High import count."
+    },
+    "tests/utils/shadow-dom.ts": {
+      "path": "/home/user/PopFact/tests/utils/shadow-dom.ts",
+      "type": "utility",
+      "lines": 116,
+      "imports": [
+        "@playwright/test"
+      ],
+      "imported_by": [
+        "tests/overlay-basic.spec.ts",
+        "tests/fact-checking.spec.ts",
+        "tests/anti-fragility.spec.ts",
+        "tests/enhanced-context.spec.ts",
+        "tests/performance.spec.ts"
+      ],
+      "exports": [
+        "getOverlay",
+        "getTickerScroll",
+        "getToggleButton",
+        "getFactItems",
+        "getFactItemsByCategory",
+        "getStatusIndicator",
+        "waitForOverlay",
+        "waitForFactItem",
+        "isOverlayHidden",
+        "toggleOverlay",
+        "getFactItemText",
+        "waitForLoadingToComplete"
+      ],
+      "coupling_score": 60,
+      "notes": "Most imported test utility. Hub file."
+    },
+    "tests/utils/network-mocking.ts": {
+      "path": "/home/user/PopFact/tests/utils/network-mocking.ts",
+      "type": "utility",
+      "lines": 156,
+      "imports": [
+        "@playwright/test"
+      ],
+      "imported_by": [
+        "tests/fact-checking.spec.ts",
+        "tests/anti-fragility.spec.ts",
+        "tests/enhanced-context.spec.ts"
+      ],
+      "exports": [
+        "MockFactCheckResponse (interface)",
+        "mockFactCheckResponse",
+        "mockFactCheckResponses",
+        "mockApiEndpoint"
+      ],
+      "coupling_score": 40,
+      "notes": "Network mocking utilities."
+    },
+    "tests/utils/performance.ts": {
+      "path": "/home/user/PopFact/tests/utils/performance.ts",
+      "type": "utility",
+      "lines": 148,
+      "imports": [
+        "@playwright/test"
+      ],
+      "imported_by": [
+        "tests/performance.spec.ts"
+      ],
+      "exports": [
+        "PerformanceMetrics (interface)",
+        "measureOverlayFirstPaint",
+        "measurePagePerformance",
+        "checkOverlayPerformance",
+        "measureTickerFPS",
+        "measureMemoryImpact"
+      ],
+      "coupling_score": 20,
+      "notes": "Performance measurement utilities."
+    },
+    "tests/fixtures/extension-fixtures.ts": {
+      "path": "/home/user/PopFact/tests/fixtures/extension-fixtures.ts",
+      "type": "fixture",
+      "lines": 62,
+      "imports": [
+        "@playwright/test",
+        "path"
+      ],
+      "imported_by": [],
+      "exports": [
+        "test (extended)",
+        "expect"
+      ],
+      "coupling_score": 25,
+      "notes": "Custom Playwright fixtures. Currently unused."
+    },
+    "tests/fixtures/test-page.html": {
+      "path": "/home/user/PopFact/tests/fixtures/test-page.html",
+      "type": "fixture",
+      "lines": 143,
+      "imports": [],
+      "imported_by": [
+        "tests/smoke.spec.ts",
+        "tests/overlay-basic.spec.ts",
+        "tests/fact-checking.spec.ts",
+        "tests/anti-fragility.spec.ts",
+        "tests/enhanced-context.spec.ts",
+        "tests/performance.spec.ts"
+      ],
+      "exports": [],
+      "coupling_score": 50,
+      "notes": "Primary test fixture. High import count."
+    }
+  },
+  "dependency_summary": {
+    "hub_files": [
+      {
+        "file": "manifest.json",
+        "score": 75,
+        "reason": "Connects all extension components"
+      },
+      {
+        "file": "tests/utils/shadow-dom.ts",
+        "score": 60,
+        "reason": "Imported by 5 test files"
+      },
+      {
+        "file": "tests/utils/inject-extension.ts",
+        "score": 55,
+        "reason": "Imported by 4 test files"
+      }
+    ],
+    "orphan_files": [
+      "tests/fixtures/extension-fixtures.ts",
+      "icons/create-placeholder-icons.js",
+      "demo-enhanced-ticker.html",
+      "quick-test.html"
+    ],
+    "high_coupling_files": [
+      "content.js",
+      "background.js",
+      "tests/extension.spec.ts"
+    ]
+  }
+}
