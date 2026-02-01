@@ -8,6 +8,7 @@ class PopFactOverlay {
     this.tickerPaused = false;
     this.factCheckQueue = [];
     this.factResults = []; // Store fact check results
+    this.maxFactResults = 50; // Limit ticker history
     this.processedClaims = new Set();
     this.maxProcessedClaims = 1000; // Prevent unbounded memory growth
     this.observer = null;
@@ -29,6 +30,9 @@ class PopFactOverlay {
 
     // Extract and queue initial claims
     this.queueInitialFactChecks();
+
+    // Monitor content changes for new claims
+    this.monitorPageContent();
 
     console.log('PopFact: Overlay initialized');
   }
@@ -290,7 +294,10 @@ class PopFactOverlay {
     claims.forEach(claim => {
       chrome.runtime.sendMessage({
         type: 'FACT_CHECK_REQUEST',
-        claimText: claim
+        claim: claim,
+        source: 'text',
+        url: window.location.href,
+        timestamp: Date.now()
       });
     });
   }
@@ -318,6 +325,9 @@ class PopFactOverlay {
   setupMessageListener() {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.type === 'FACT_CHECK_RESULT') {
+        if (this.factResults.length >= this.maxFactResults) {
+          this.factResults.shift();
+        }
         this.factResults.push(message.data);
         this.updateTicker();
       }

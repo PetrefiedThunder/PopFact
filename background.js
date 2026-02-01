@@ -143,7 +143,7 @@ class FactCheckService {
         this.clearCache();
         sendResponse({ success: true });
       } else if (message.type === 'UPDATE_SETTINGS') {
-        this.loadUserSettings();
+        this.loadSettings();
         sendResponse({ success: true });
       }
       return true; // Keep message channel open for async responses
@@ -243,7 +243,6 @@ class FactCheckService {
         const firstKey = this.cache.keys().next().value;
         this.cache.delete(firstKey);
       }
-      this.cache.set(cacheKey, enrichedResult);
 
       // Enrich result with request metadata and active provider
       const enrichedResult = {
@@ -254,6 +253,7 @@ class FactCheckService {
         provider: this.settings.apiProvider,
         timestamp: Date.now()
       };
+      this.cache.set(cacheKey, enrichedResult);
 
       // Persist log and send to tab
       this.recordFactCheck(enrichedResult);
