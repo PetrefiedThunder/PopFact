@@ -10,7 +10,8 @@
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
     "test:debug": "playwright test --debug",
-    "test:report": "playwright show-report"
+    "test:report": "playwright show-report",
+    "package": "rm -f popfact-extension.zip && zip -r popfact-extension.zip manifest.json background.js content.js popup.html popup.js popup.css overlay.css disclaimer.html LICENSE icons/icon16.png icons/icon48.png icons/icon128.png"
   },
   "keywords": [],
   "author": "",
