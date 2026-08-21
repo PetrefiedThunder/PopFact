@@ -29,7 +29,8 @@ class FactCheckService {
 
     this.providers = {
       'open-knowledge': new OpenKnowledgeProvider(),
-      'mock': new MockProvider()
+      'mock': new MockProvider(),
+      'google': new GoogleFactCheckProvider()
     };
 
     this.setupMessageListener();
@@ -575,5 +576,83 @@ class OpenKnowledgeProvider {
     return Math.min(1, Math.max(0, base + threshold / 500));
   }
 }
+
+// Google Fact Check Tools API (claims:search)
+// https://developers.google.com/fact-check/tools/api/reference/rest/v1alpha1/claims/search
+// Requires an API key with the Fact Check Tools API enabled (entered in the popup).
+class GoogleFactCheckProvider {
+  async check(claim, context = {}) {
+    if (!context.apiKey) {
+      return {
+        verdict: 'ERROR',
+        explanation: 'Google Fact Check requires an API key. Add one in the PopFact settings popup.',
+        confidence: 0,
+        sources: []
+      };
+    }
+
+    const url = `https://factchecktools.googleapis.com/v1alpha1/claims:search?query=${encodeURIComponent(claim)}&languageCode=en&pageSize=5&key=${encodeURIComponent(context.apiKey)}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Google Fact Check API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const reviews = (data.claims || [])
+      .flatMap((c) => (c.claimReview || []).map((review) => ({ claimText: c.text, review })))
+      .filter((entry) => entry.review);
+
+    if (reviews.length === 0) {
+      return {
+        verdict: 'UNVERIFIED',
+        explanation: '? UNVERIFIED: No published fact checks found for this claim in the Google Fact Check database.',
+        confidence: 0.3,
+        sources: []
+      };
+    }
+
+    const verdicts = reviews.map((entry) => this.ratingToVerdict(entry.review.textualRating));
+    const verdict = this.aggregateVerdicts(verdicts);
+    const sources = reviews.map((entry) => entry.review.url).filter(Boolean);
+    const top = reviews[0];
+    const publisher = top.review.publisher?.name || top.review.publisher?.site || 'a fact checker';
+
+    return {
+      verdict,
+      explanation: `${VERDICT_PREFIXES[verdict]} ${publisher} rated a matching claim "${top.review.textualRating}"${top.review.title ? ` — ${top.review.title}` : ''} (${reviews.length} published review${reviews.length === 1 ? '' : 's'} found).`,
+      confidence: verdict === 'UNVERIFIED' ? 0.4 : Math.min(0.95, 0.7 + reviews.length * 0.05),
+      sources
+    };
+  }
+
+  ratingToVerdict(textualRating) {
+    if (!textualRating) return 'UNVERIFIED';
+    const rating = textualRating.toLowerCase();
+
+    if (/half|mixed|partly|partially|mostly/.test(rating)) return 'MIXED';
+    if (/false|incorrect|inaccurate|pants on fire|misleading|distort|fake|hoax|debunk|wrong|no evidence|unsupported/.test(rating)) return 'FALSE';
+    if (/true|correct|accurate|legit/.test(rating)) return 'TRUE';
+    return 'UNVERIFIED';
+  }
+
+  aggregateVerdicts(verdicts) {
+    const counts = verdicts.reduce((acc, v) => {
+      acc[v] = (acc[v] || 0) + 1;
+      return acc;
+    }, {});
+
+    const decisive = ['TRUE', 'FALSE', 'MIXED'].filter((v) => counts[v]);
+    if (decisive.length === 0) return 'UNVERIFIED';
+    if (decisive.length > 1 && counts.TRUE && counts.FALSE) return 'MIXED';
+    return decisive.sort((a, b) => counts[b] - counts[a])[0];
+  }
+}
+
+const VERDICT_PREFIXES = {
+  TRUE: '✓ VERIFIED:',
+  FALSE: '✗ DISPUTED:',
+  MIXED: '⚠ NUANCED:',
+  UNVERIFIED: '? UNVERIFIED:'
+};
 
 new FactCheckService();
