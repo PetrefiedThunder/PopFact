@@ -141,7 +141,15 @@ class PopFactOverlay {
 
     this.scanForClaims();
 
-    this.observer = new MutationObserver(() => {
+    this.observer = new MutationObserver((mutations) => {
+      const pageChanged = mutations.some((mutation) => {
+        const target = mutation.target.nodeType === Node.ELEMENT_NODE
+          ? mutation.target
+          : mutation.target.parentElement;
+        return target?.isConnected && !target.closest('#popfact-overlay, #popfact-toggle');
+      });
+      if (!pageChanged) return;
+
       // Debounce to prevent performance issues and infinite loops
       if (this.extractDebounceTimer) {
         clearTimeout(this.extractDebounceTimer);
