@@ -282,3 +282,73 @@ test('dynamic claims beyond the first ten are scanned without exceeding the per-
   assert.deepEqual((await snapshot(page)).claims, [...claims, dynamicClaim, ...batch.slice(0, 10)]);
   assert.deepEqual(errors, []);
 });
+
+async function deliverResult(page, claim = initialClaim) {
+  await page.evaluate(text => {
+    for (const listener of __fixture.listeners) listener({ type: 'FACT_CHECK_RESULT', data: {
+      claim: text, verdict: 'TRUE', explanation: text, confidence: 0.8
+    } });
+  }, claim);
+}
+
+test('overlay and toggle mutations do not schedule page scans', async t => {
+  const { page, errors } = await contentHarness(t);
+  await deliverResult(page);
+  await page.evaluate(() => {
+    document.getElementById('popfact-toggle').click();
+    document.getElementById('popfact-flow-toggle').click();
+    document.querySelector('.popfact-claim').firstChild.data = 'Synthetic ticker text changed';
+  });
+  assert.equal((await snapshot(page)).timers, 0);
+  await page.evaluate(() => __fixture.tick(500));
+  assert.deepEqual((await snapshot(page)).claims, [initialClaim]);
+  assert.deepEqual(errors, []);
+});
+
+test('overlay updates preserve pending host debounce and mixed host mutations still scan', async t => {
+  const { page, errors } = await contentHarness(t);
+  await appendClaim(page, dynamicClaim);
+  await page.evaluate(() => __fixture.tick(400));
+  await deliverResult(page);
+  await page.evaluate(() => __fixture.tick(100));
+  assert.deepEqual((await snapshot(page)).claims, [initialClaim, dynamicClaim],
+    'ticker updates must not postpone a valid page scan');
+  const editedClaim = 'The synthetic museum catalogs thirty ancient artifacts during every summer season';
+  await page.evaluate(text => {
+    document.querySelector('p').firstChild.data = `${text}.`;
+    document.getElementById('popfact-status-text').textContent = 'Synthetic status';
+  }, editedClaim);
+  assert.equal((await snapshot(page)).timers, 1);
+  await page.evaluate(() => __fixture.tick(500));
+  assert.deepEqual((await snapshot(page)).claims, [initialClaim, dynamicClaim, editedClaim]);
+  assert.deepEqual(errors, []);
+});
+
+test('ticker results cannot restart scanning after the retained-claim capacity is reached', async t => {
+  const claims = Array.from({ length: 1000 }, (_, index) => `${initialClaim} number ${index}`);
+  const { page, errors } = await contentHarness(t, { claims });
+  // Each genuine host mutation requests another capped batch from the shipped scanner.
+  await page.evaluate(async () => {
+    for (let batch = 1; batch < 100; batch += 1) {
+      document.body.appendChild(document.createTextNode(' '));
+      await Promise.resolve();
+      __fixture.tick(500);
+    }
+  });
+  assert.deepEqual((await snapshot(page)).claims, claims);
+  await appendClaim(page, dynamicClaim);
+  await page.evaluate(() => __fixture.tick(500));
+  assert.deepEqual((await snapshot(page)).claims, [...claims, dynamicClaim]);
+  for (let result = 0; result < 6; result += 1) {
+    await deliverResult(page, dynamicClaim);
+    await page.evaluate(() => __fixture.tick(500));
+  }
+  assert.equal((await snapshot(page)).claims.length, 1001,
+    'result rendering must not cause old evicted claims to be dispatched again');
+  assert.equal((await snapshot(page)).timers, 0);
+  const newHostClaim = 'The synthetic university tracks fifty research projects during every autumn season';
+  await appendClaim(page, newHostClaim);
+  await page.evaluate(() => __fixture.tick(500));
+  assert.ok((await snapshot(page)).claims.includes(newHostClaim), 'real host mutations must still scan');
+  assert.deepEqual(errors, []);
+});
