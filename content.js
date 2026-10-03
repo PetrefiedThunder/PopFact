@@ -31,17 +31,23 @@ class PopFactOverlay {
     this.tickerPaused = false;
     this.factResults = [];
     this.processedClaims = new Set();
+    this.pageProcessedClaims = new Set();
     this.observer = null;
     this.extractDebounceTimer = null;
+    this.messageListener = null;
+    this.initialized = false;
 
     this.init();
   }
 
   init() {
+    if (this.initialized || !document.body) return;
+
     this.createOverlay();
     this.setupMessageListener();
     this.detectMediaElements();
     this.monitorPageContent();
+    this.initialized = true;
 
     console.log('PopFact: Overlay initialized');
   }
@@ -132,11 +138,19 @@ class PopFactOverlay {
   }
 
   monitorPageContent() {
-    if (!document.body) return;
+    if (!document.body || this.observer) return;
 
     this.scanForClaims();
 
-    this.observer = new MutationObserver(() => {
+    this.observer = new MutationObserver((mutations) => {
+      const pageChanged = mutations.some((mutation) => {
+        const target = mutation.target.nodeType === Node.ELEMENT_NODE
+          ? mutation.target
+          : mutation.target.parentElement;
+        return target?.isConnected && !target.closest('#popfact-overlay, #popfact-toggle');
+      });
+      if (!pageChanged) return;
+
       // Debounce to prevent performance issues and infinite loops
       if (this.extractDebounceTimer) {
         clearTimeout(this.extractDebounceTimer);
@@ -154,10 +168,17 @@ class PopFactOverlay {
   }
 
   scanForClaims() {
-    const claims = this.extractClaimsFromPage();
+    const pageClaims = this.extractClaimsFromPage();
+    // Keep known claims only while present; removed claims retain the bounded history below.
+    this.pageProcessedClaims = new Set(pageClaims.filter((claim) =>
+      this.pageProcessedClaims.has(claim) || this.processedClaims.has(claim)
+    ));
+    const claims = pageClaims
+      .filter((claim) => !this.pageProcessedClaims.has(claim))
+      .slice(0, MAX_CLAIMS_PER_SCAN);
 
     claims.forEach((claim) => {
-      if (this.processedClaims.has(claim)) return;
+      if (this.pageProcessedClaims.has(claim)) return;
 
       // LRU-style eviction to bound memory usage
       if (this.processedClaims.size >= MAX_PROCESSED_CLAIMS) {
@@ -165,6 +186,7 @@ class PopFactOverlay {
         this.processedClaims.delete(oldestClaim);
       }
       this.processedClaims.add(claim);
+      this.pageProcessedClaims.add(claim);
       this.sendForFactCheck(claim, 'text');
     });
   }
@@ -233,8 +255,7 @@ class PopFactOverlay {
         }
 
         return true;
-      })
-      .slice(0, MAX_CLAIMS_PER_SCAN);
+      });
   }
 
   sendForFactCheck(claim, source) {
@@ -257,7 +278,9 @@ class PopFactOverlay {
   }
 
   setupMessageListener() {
-    chrome.runtime.onMessage.addListener((message) => {
+    if (this.messageListener) return;
+
+    this.messageListener = (message) => {
       if (message.type === 'FACT_CHECK_RESULT') {
         if (this.factResults.length >= MAX_FACT_RESULTS) {
           this.factResults.shift();
@@ -265,7 +288,8 @@ class PopFactOverlay {
         this.factResults.push(message.data);
         this.updateTicker();
       }
-    });
+    };
+    chrome.runtime.onMessage.addListener(this.messageListener);
   }
 
   updateTicker() {
@@ -383,7 +407,7 @@ class PopFactOverlay {
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     new PopFactOverlay();
-  });
+  }, { once: true });
 } else {
   new PopFactOverlay();
 }
