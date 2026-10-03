@@ -31,6 +31,7 @@ class PopFactOverlay {
     this.tickerPaused = false;
     this.factResults = [];
     this.processedClaims = new Set();
+    this.pageProcessedClaims = new Set();
     this.observer = null;
     this.extractDebounceTimer = null;
     this.messageListener = null;
@@ -167,12 +168,17 @@ class PopFactOverlay {
   }
 
   scanForClaims() {
-    const claims = this.extractClaimsFromPage()
-      .filter((claim) => !this.processedClaims.has(claim))
+    const pageClaims = this.extractClaimsFromPage();
+    // Keep known claims only while present; removed claims retain the bounded history below.
+    this.pageProcessedClaims = new Set(pageClaims.filter((claim) =>
+      this.pageProcessedClaims.has(claim) || this.processedClaims.has(claim)
+    ));
+    const claims = pageClaims
+      .filter((claim) => !this.pageProcessedClaims.has(claim))
       .slice(0, MAX_CLAIMS_PER_SCAN);
 
     claims.forEach((claim) => {
-      if (this.processedClaims.has(claim)) return;
+      if (this.pageProcessedClaims.has(claim)) return;
 
       // LRU-style eviction to bound memory usage
       if (this.processedClaims.size >= MAX_PROCESSED_CLAIMS) {
@@ -180,6 +186,7 @@ class PopFactOverlay {
         this.processedClaims.delete(oldestClaim);
       }
       this.processedClaims.add(claim);
+      this.pageProcessedClaims.add(claim);
       this.sendForFactCheck(claim, 'text');
     });
   }
