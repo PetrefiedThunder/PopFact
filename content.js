@@ -33,15 +33,20 @@ class PopFactOverlay {
     this.processedClaims = new Set();
     this.observer = null;
     this.extractDebounceTimer = null;
+    this.messageListener = null;
+    this.initialized = false;
 
     this.init();
   }
 
   init() {
+    if (this.initialized || !document.body) return;
+
     this.createOverlay();
     this.setupMessageListener();
     this.detectMediaElements();
     this.monitorPageContent();
+    this.initialized = true;
 
     console.log('PopFact: Overlay initialized');
   }
@@ -132,7 +137,7 @@ class PopFactOverlay {
   }
 
   monitorPageContent() {
-    if (!document.body) return;
+    if (!document.body || this.observer) return;
 
     this.scanForClaims();
 
@@ -154,7 +159,9 @@ class PopFactOverlay {
   }
 
   scanForClaims() {
-    const claims = this.extractClaimsFromPage();
+    const claims = this.extractClaimsFromPage()
+      .filter((claim) => !this.processedClaims.has(claim))
+      .slice(0, MAX_CLAIMS_PER_SCAN);
 
     claims.forEach((claim) => {
       if (this.processedClaims.has(claim)) return;
@@ -233,8 +240,7 @@ class PopFactOverlay {
         }
 
         return true;
-      })
-      .slice(0, MAX_CLAIMS_PER_SCAN);
+      });
   }
 
   sendForFactCheck(claim, source) {
@@ -257,7 +263,9 @@ class PopFactOverlay {
   }
 
   setupMessageListener() {
-    chrome.runtime.onMessage.addListener((message) => {
+    if (this.messageListener) return;
+
+    this.messageListener = (message) => {
       if (message.type === 'FACT_CHECK_RESULT') {
         if (this.factResults.length >= MAX_FACT_RESULTS) {
           this.factResults.shift();
@@ -265,7 +273,8 @@ class PopFactOverlay {
         this.factResults.push(message.data);
         this.updateTicker();
       }
-    });
+    };
+    chrome.runtime.onMessage.addListener(this.messageListener);
   }
 
   updateTicker() {
@@ -383,7 +392,7 @@ class PopFactOverlay {
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     new PopFactOverlay();
-  });
+  }, { once: true });
 } else {
   new PopFactOverlay();
 }
