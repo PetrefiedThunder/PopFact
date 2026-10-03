@@ -352,3 +352,90 @@ test('ticker results cannot restart scanning after the retained-claim capacity i
   assert.ok((await snapshot(page)).claims.includes(newHostClaim), 'real host mutations must still scan');
   assert.deepEqual(errors, []);
 });
+
+async function scanInitialThousandClaims(page) {
+  await page.evaluate(async () => {
+    for (let batch = 1; batch < 100; batch += 1) {
+      document.body.appendChild(document.createTextNode(' '));
+      await Promise.resolve();
+      __fixture.tick(500);
+    }
+  });
+}
+
+async function appendClaimBatch(page, claims) {
+  await page.evaluate(texts => {
+    for (const text of texts) {
+      const paragraph = document.createElement('p');
+      paragraph.textContent = `${text}.`;
+      document.body.appendChild(paragraph);
+    }
+  }, claims);
+  await page.evaluate(() => __fixture.tick(500));
+}
+
+test('visible old claims cannot starve appended, prepended, or edited claims after history eviction', async t => {
+  const initial = Array.from({ length: 1000 }, (_, index) => `${initialClaim} number ${index}`);
+  const { page, errors } = await contentHarness(t, { claims: initial });
+  await scanInitialThousandClaims(page);
+  const extra = Array.from({ length: 10 }, (_, index) => `${dynamicClaim} number ${index}`);
+  await appendClaimBatch(page, extra);
+  const expected = [...initial, ...extra];
+  assert.deepEqual((await snapshot(page)).claims, expected);
+  for (let index = 0; index < 3; index += 1) {
+    const claim = `${dynamicClaim} appended after retention capacity ${index}`;
+    await appendClaimBatch(page, [claim]);
+    expected.push(claim);
+    assert.deepEqual((await snapshot(page)).claims, expected,
+      'old visible claims must not consume the capped scan or block a new appended claim');
+  }
+  const prepended = `${dynamicClaim} prepended after retention capacity`;
+  const edited = `${dynamicClaim} edited after retention capacity`;
+  await page.evaluate(({ prepended, edited }) => {
+    document.querySelector('p').firstChild.data = `${edited}.`;
+    const paragraph = document.createElement('p');
+    paragraph.textContent = `${prepended}.`;
+    document.body.prepend(paragraph);
+  }, { prepended, edited });
+  await page.evaluate(() => __fixture.tick(500));
+  assert.deepEqual((await snapshot(page)).claims, [...expected, prepended, edited]);
+  assert.deepEqual(errors, []);
+});
+
+test('live claim markers follow current page content while historical retention stays capped', async t => {
+  const initial = Array.from({ length: 1000 }, (_, index) => `${initialClaim} number ${index}`);
+  const { page, errors } = await contentHarness(t, { startup: 'manual', claims: initial });
+  await page.evaluate(() => { __fixture.overlay = new PopFactOverlay(); });
+  await scanInitialThousandClaims(page);
+  const extra = Array.from({ length: 10 }, (_, index) => `${dynamicClaim} number ${index}`);
+  await appendClaimBatch(page, extra);
+  const removeClaim = async claim => {
+    await page.evaluate(text => {
+      [...document.querySelectorAll('p')].find(paragraph => paragraph.textContent === `${text}.`).remove();
+    }, claim);
+    await page.evaluate(() => __fixture.tick(500));
+  };
+  // A removed, already evicted claim is eligible again when reintroduced.
+  await removeClaim(initial[0]);
+  await appendClaimBatch(page, [initial[0]]);
+  assert.equal((await snapshot(page)).claims.filter(claim => claim === initial[0]).length, 2);
+  // A retained-history hit must regain its live marker without a new dispatch.
+  await removeClaim(initial[11]);
+  await appendClaimBatch(page, [initial[11]]);
+  const churn = Array.from({ length: 10 }, (_, index) => `${dynamicClaim} churn number ${index}`);
+  await appendClaimBatch(page, churn);
+  await appendClaimBatch(page, [`${dynamicClaim} after retained reinsertion`]);
+  assert.equal((await snapshot(page)).claims.filter(claim => claim === initial[11]).length, 1,
+    'reintroduced historical claim must remain known while present after history eviction');
+  assert.deepEqual(await page.evaluate(() => ({
+    live: __fixture.overlay.pageProcessedClaims.size,
+    history: __fixture.overlay.processedClaims.size
+  })), { live: 1021, history: 1000 });
+  await page.evaluate(() => document.querySelectorAll('p').forEach(paragraph => paragraph.remove()));
+  await page.evaluate(() => __fixture.tick(500));
+  assert.deepEqual(await page.evaluate(() => ({
+    live: __fixture.overlay.pageProcessedClaims.size,
+    history: __fixture.overlay.processedClaims.size
+  })), { live: 0, history: 1000 }, 'removed page claims must not accumulate in live markers');
+  assert.deepEqual(errors, []);
+});
