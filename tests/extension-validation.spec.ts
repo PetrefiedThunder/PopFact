@@ -54,7 +54,8 @@ test.describe('PopFact Extension - Core Functionality', () => {
     expect(css).toContain('#popfact-overlay');
     expect(css).toContain('.popfact-brand');
     expect(css).toContain('.popfact-ticker');
-    expect(css).toContain('popfact-scroll');
+    expect(css).toContain('#popfact-ticker-scroll');
+    expect(css).toContain('@keyframes scroll-ticker');
     expect(css).toContain('.popfact-true');
     expect(css).toContain('.popfact-false');
     
@@ -91,10 +92,10 @@ test.describe('PopFact Extension - Core Functionality', () => {
     const backgroundJs = fs.readFileSync(path.join(extensionPath, 'background.js'), 'utf-8');
     
     // Check for mock patterns
-    expect(backgroundJs).toContain('performFactCheckMock');
+    expect(backgroundJs).toContain('MockProvider');
     expect(backgroundJs).toContain('earth is round');
     expect(backgroundJs).toContain('flat earth');
-    expect(backgroundJs).toContain('2020 election');
+    expect(backgroundJs).toContain('election');
     expect(backgroundJs).toContain('verdict');
     expect(backgroundJs).toContain('confidence');
     
