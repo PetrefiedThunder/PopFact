@@ -1,10 +1,26 @@
 // PopFact Popup Script
 
+const VALID_TICKER_SPEEDS = ['slow', 'medium', 'fast'];
+const VALID_API_PROVIDERS = ['open-knowledge', 'mock', 'openai', 'claude', 'google', 'custom'];
+const MAX_API_KEY_LENGTH = 500;
+const STATUS_REFRESH_MS = 5000;
+
 document.addEventListener('DOMContentLoaded', () => {
   loadSettings();
   setupEventListeners();
   updateStatus();
 });
+
+function validateSettings(settings) {
+  return {
+    enableText: Boolean(settings.enableText),
+    enableAudio: Boolean(settings.enableAudio),
+    enableVideo: Boolean(settings.enableVideo),
+    tickerSpeed: VALID_TICKER_SPEEDS.includes(settings.tickerSpeed) ? settings.tickerSpeed : 'medium',
+    confidenceThreshold: Math.max(0, Math.min(100, parseInt(settings.confidenceThreshold) || 50)),
+    apiProvider: VALID_API_PROVIDERS.includes(settings.apiProvider) ? settings.apiProvider : 'open-knowledge'
+  };
+}
 
 function loadSettings() {
   // Load non-sensitive settings from sync storage
@@ -16,15 +32,7 @@ function loadSettings() {
     confidenceThreshold: 50,
     apiProvider: 'open-knowledge'
   }, (settings) => {
-    // Validate and sanitize settings
-    const validatedSettings = {
-      enableText: Boolean(settings.enableText),
-      enableAudio: Boolean(settings.enableAudio),
-      enableVideo: Boolean(settings.enableVideo),
-      tickerSpeed: ['slow', 'medium', 'fast'].includes(settings.tickerSpeed) ? settings.tickerSpeed : 'medium',
-      confidenceThreshold: Math.max(0, Math.min(100, parseInt(settings.confidenceThreshold) || 50)),
-      apiProvider: ['open-knowledge', 'mock', 'openai', 'claude', 'google', 'custom'].includes(settings.apiProvider) ? settings.apiProvider : 'open-knowledge'
-    };
+    const validatedSettings = validateSettings(settings);
 
     document.getElementById('enable-text').checked = validatedSettings.enableText;
     document.getElementById('enable-audio').checked = validatedSettings.enableAudio;
@@ -69,33 +77,24 @@ function setupEventListeners() {
   // Help link
   document.getElementById('help-link').addEventListener('click', (e) => {
     e.preventDefault();
-    chrome.tabs.create({ url: 'https://github.com/yourusername/popfact' });
+    chrome.tabs.create({ url: 'https://github.com/PetrefiedThunder/PopFact' });
   });
 }
 
 function saveSettings() {
-  // Get and validate all inputs to prevent DOM manipulation
-  const enableText = document.getElementById('enable-text').checked;
-  const enableAudio = document.getElementById('enable-audio').checked;
-  const enableVideo = document.getElementById('enable-video').checked;
-  const tickerSpeed = document.getElementById('ticker-speed').value;
-  const confidenceThreshold = parseInt(document.getElementById('confidence-threshold').value);
-  const apiProvider = document.getElementById('api-provider').value;
+  // Validate all inputs to prevent DOM manipulation
+  const validatedSyncSettings = validateSettings({
+    enableText: document.getElementById('enable-text').checked,
+    enableAudio: document.getElementById('enable-audio').checked,
+    enableVideo: document.getElementById('enable-video').checked,
+    tickerSpeed: document.getElementById('ticker-speed').value,
+    confidenceThreshold: document.getElementById('confidence-threshold').value,
+    apiProvider: document.getElementById('api-provider').value
+  });
+
   const apiKey = document.getElementById('api-key').value;
-
-  // Validate all values
-  const validatedSyncSettings = {
-    enableText: Boolean(enableText),
-    enableAudio: Boolean(enableAudio),
-    enableVideo: Boolean(enableVideo),
-    tickerSpeed: ['slow', 'medium', 'fast'].includes(tickerSpeed) ? tickerSpeed : 'medium',
-    confidenceThreshold: Math.max(0, Math.min(100, confidenceThreshold || 50)),
-    apiProvider: ['open-knowledge', 'mock', 'openai', 'claude', 'google', 'custom'].includes(apiProvider) ? apiProvider : 'open-knowledge'
-  };
-
-  // Validate API key (max length)
   const validatedLocalSettings = {
-    apiKey: typeof apiKey === 'string' && apiKey.length <= 500 ? apiKey : ''
+    apiKey: typeof apiKey === 'string' && apiKey.length <= MAX_API_KEY_LENGTH ? apiKey : ''
   };
 
   // Save both
@@ -175,15 +174,13 @@ function sendWrapUpEmail() {
   });
 }
 
-function updateStatus() {
+function refreshClaimsCount() {
   chrome.storage.local.get(['claimsChecked'], (data) => {
     document.getElementById('claims-count').textContent = data.claimsChecked || 0;
   });
+}
 
-  // Update status periodically
-  setInterval(() => {
-    chrome.storage.local.get(['claimsChecked'], (data) => {
-      document.getElementById('claims-count').textContent = data.claimsChecked || 0;
-    });
-  }, 5000);
+function updateStatus() {
+  refreshClaimsCount();
+  setInterval(refreshClaimsCount, STATUS_REFRESH_MS);
 }

@@ -1,56 +1,30 @@
 // PopFact Background Service Worker
 // Handles fact-checking requests and API integration with multi-source verification
 
-// Trusted fact-checking organizations and their credibility scores
-const TRUSTED_SOURCES = {
-  // International Fact-Checking Network (IFCN) verified organizations
-  'politifact.com': { name: 'PolitiFact', credibility: 0.95, type: 'fact-checker' },
-  'factcheck.org': { name: 'FactCheck.org', credibility: 0.95, type: 'fact-checker' },
-  'snopes.com': { name: 'Snopes', credibility: 0.90, type: 'fact-checker' },
-  'fullfact.org': { name: 'Full Fact', credibility: 0.95, type: 'fact-checker' },
-  'apnews.com': { name: 'Associated Press', credibility: 0.92, type: 'news' },
-  'reuters.com': { name: 'Reuters', credibility: 0.92, type: 'news' },
-  'bbc.com': { name: 'BBC', credibility: 0.90, type: 'news' },
-  'theguardian.com': { name: 'The Guardian', credibility: 0.88, type: 'news' },
-  'nytimes.com': { name: 'New York Times', credibility: 0.90, type: 'news' },
-  'washingtonpost.com': { name: 'Washington Post', credibility: 0.90, type: 'news' },
-  'nature.com': { name: 'Nature', credibility: 0.98, type: 'academic' },
-  'science.org': { name: 'Science', credibility: 0.98, type: 'academic' },
-  'pubmed.ncbi.nlm.nih.gov': { name: 'PubMed', credibility: 0.97, type: 'academic' },
-  'scholar.google.com': { name: 'Google Scholar', credibility: 0.85, type: 'academic' },
-  'cdc.gov': { name: 'CDC', credibility: 0.95, type: 'government' },
-  'nih.gov': { name: 'NIH', credibility: 0.96, type: 'government' },
-  'who.int': { name: 'WHO', credibility: 0.94, type: 'government' },
-  'nasa.gov': { name: 'NASA', credibility: 0.97, type: 'government' },
-  'noaa.gov': { name: 'NOAA', credibility: 0.96, type: 'government' }
-};
+const CACHE_MAX_SIZE = 1000;
+const QUEUE_MAX_SIZE = 100;
+const QUEUE_PROCESS_DELAY_MS = 1000;
+const FACT_CHECK_LOG_MAX_ENTRIES = 200;
+const RATE_LIMIT_MAX_TOKENS = 60;
+const RATE_LIMIT_REFILL_PER_SECOND = 1; // 60 requests/minute
 
-// Academic journal domains (high credibility)
-const ACADEMIC_DOMAINS = [
-  '.edu', '.ac.uk', '.ac.', 'pubmed', 'doi.org', 'arxiv.org',
-  'jstor.org', 'springer.com', 'elsevier.com', 'ieee.org'
-];
-
+const DEFAULT_PROVIDER = 'open-knowledge';
+const DEFAULT_CONFIDENCE_THRESHOLD = 50;
 
 class FactCheckService {
   constructor() {
     this.cache = new Map();
-    this.cacheMaxSize = 1000; // Prevent unbounded cache growth
     this.queue = [];
     this.processing = false;
-    this.trustedSources = TRUSTED_SOURCES;
-    this.sourceCache = new Map(); // Cache source credibility lookups
 
     // Rate limiting: token bucket algorithm
-    this.rateLimitTokens = 60; // 60 requests
-    this.rateLimitMax = 60;
-    this.rateLimitRefillRate = 1; // 1 token per second (60 req/min)
+    this.rateLimitTokens = RATE_LIMIT_MAX_TOKENS;
     this.lastRefill = Date.now();
 
     this.settings = {
-      apiProvider: 'open-knowledge',
+      apiProvider: DEFAULT_PROVIDER,
       apiKey: '',
-      confidenceThreshold: 50
+      confidenceThreshold: DEFAULT_CONFIDENCE_THRESHOLD
     };
 
     this.providers = {
@@ -66,14 +40,14 @@ class FactCheckService {
 
   loadSettings() {
     chrome.storage.sync.get({
-      apiProvider: 'open-knowledge',
-      confidenceThreshold: 50
+      apiProvider: DEFAULT_PROVIDER,
+      confidenceThreshold: DEFAULT_CONFIDENCE_THRESHOLD
     }, (data) => {
       if (data && typeof data === 'object') {
-        this.settings.apiProvider = data.apiProvider || 'open-knowledge';
+        this.settings.apiProvider = data.apiProvider || DEFAULT_PROVIDER;
         this.settings.confidenceThreshold = Number.isFinite(data.confidenceThreshold)
           ? data.confidenceThreshold
-          : 50;
+          : DEFAULT_CONFIDENCE_THRESHOLD;
       }
     });
 
@@ -86,7 +60,7 @@ class FactCheckService {
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName === 'sync') {
         if (changes.apiProvider) {
-          this.settings.apiProvider = changes.apiProvider.newValue || 'open-knowledge';
+          this.settings.apiProvider = changes.apiProvider.newValue || DEFAULT_PROVIDER;
         }
         if (changes.confidenceThreshold) {
           this.settings.confidenceThreshold = changes.confidenceThreshold.newValue;
@@ -104,8 +78,8 @@ class FactCheckService {
       const now = Date.now();
       const timePassed = (now - this.lastRefill) / 1000;
       this.rateLimitTokens = Math.min(
-        this.rateLimitMax,
-        this.rateLimitTokens + timePassed * this.rateLimitRefillRate
+        RATE_LIMIT_MAX_TOKENS,
+        this.rateLimitTokens + timePassed * RATE_LIMIT_REFILL_PER_SECOND
       );
       this.lastRefill = now;
     }, 1000);
@@ -139,9 +113,6 @@ class FactCheckService {
         return true; // Keep channel open for async response
       } else if (message.type === 'MEDIA_DETECTED') {
         this.handleMediaDetection(message, sender.tab.id);
-      } else if (message.type === 'CLEAR_CACHE') {
-        this.clearCache();
-        sendResponse({ success: true });
       } else if (message.type === 'UPDATE_SETTINGS') {
         this.loadSettings();
         sendResponse({ success: true });
@@ -180,15 +151,7 @@ class FactCheckService {
     // Check cache first
     const cacheKey = this.getCacheKey(claim);
     if (this.cache.has(cacheKey)) {
-      const cachedResult = this.cache.get(cacheKey);
-      const enrichedResult = {
-        ...cachedResult,
-        claim,
-        sourceType: source,
-        url,
-        provider: this.settings.apiProvider,
-        timestamp: Date.now()
-      };
+      const enrichedResult = this.enrichResult(this.cache.get(cacheKey), { claim, source, url });
       this.recordFactCheck(enrichedResult);
       this.sendResultToTab(tabId, enrichedResult);
       return;
@@ -207,7 +170,7 @@ class FactCheckService {
     }
 
     // Limit queue size to prevent DoS
-    if (this.queue.length >= 100) {
+    if (this.queue.length >= QUEUE_MAX_SIZE) {
       console.warn('PopFact: Queue full, rejecting request');
       return;
     }
@@ -238,21 +201,13 @@ class FactCheckService {
 
       // Cache result with LRU eviction
       const cacheKey = this.getCacheKey(request.claim);
-      if (this.cache.size >= this.cacheMaxSize) {
+      if (this.cache.size >= CACHE_MAX_SIZE) {
         // Remove oldest entry (first key in Map)
         const firstKey = this.cache.keys().next().value;
         this.cache.delete(firstKey);
       }
 
-      // Enrich result with request metadata and active provider
-      const enrichedResult = {
-        ...result,
-        claim: request.claim,
-        sourceType: request.source,
-        url: request.url,
-        provider: this.settings.apiProvider,
-        timestamp: Date.now()
-      };
+      const enrichedResult = this.enrichResult(result, request);
       this.cache.set(cacheKey, enrichedResult);
 
       // Persist log and send to tab
@@ -260,7 +215,7 @@ class FactCheckService {
       this.sendResultToTab(request.tabId, enrichedResult);
 
       // Continue processing with delay to avoid rate limiting
-      setTimeout(() => this.processQueue(), 1000);
+      setTimeout(() => this.processQueue(), QUEUE_PROCESS_DELAY_MS);
     } catch (error) {
       console.error('PopFact: Fact check error:', error);
 
@@ -272,13 +227,25 @@ class FactCheckService {
         confidence: 0
       });
 
-      setTimeout(() => this.processQueue(), 1000);
+      setTimeout(() => this.processQueue(), QUEUE_PROCESS_DELAY_MS);
     }
   }
 
+  // Enrich a provider result with request metadata and the active provider
+  enrichResult(result, request) {
+    return {
+      ...result,
+      claim: request.claim,
+      sourceType: request.source,
+      url: request.url,
+      provider: this.settings.apiProvider,
+      timestamp: Date.now()
+    };
+  }
+
   async performFactCheck(claim, context = {}) {
-    const providerKey = this.settings.apiProvider || 'open-knowledge';
-    const provider = this.providers[providerKey] || this.providers['open-knowledge'];
+    const providerKey = this.settings.apiProvider || DEFAULT_PROVIDER;
+    const provider = this.providers[providerKey] || this.providers[DEFAULT_PROVIDER];
 
     try {
       const result = await provider.check(claim, {
@@ -343,7 +310,7 @@ class FactCheckService {
         timestamp: result.timestamp
       };
 
-      const updatedLog = [newEntry, ...(data.factCheckLog || [])].slice(0, 200);
+      const updatedLog = [newEntry, ...(data.factCheckLog || [])].slice(0, FACT_CHECK_LOG_MAX_ENTRIES);
       const updatedCount = (data.claimsChecked || 0) + 1;
 
       chrome.storage.local.set({
@@ -601,7 +568,7 @@ class OpenKnowledgeProvider {
     return contextualPrefix + parts.join(' • ');
   }
 
-  estimateConfidence(wikiResult, twitterResult, threshold = 50) {
+  estimateConfidence(wikiResult, twitterResult, threshold = DEFAULT_CONFIDENCE_THRESHOLD) {
     let base = 0.45;
     if (wikiResult) base += 0.25;
     if (twitterResult?.snippet) base += 0.1;
@@ -609,4 +576,4 @@ class OpenKnowledgeProvider {
   }
 }
 
-console.log('PopFact Background Service: Initialized (Mock Mode)');
+new FactCheckService();
