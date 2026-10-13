@@ -8,7 +8,7 @@ PopFact is a browser extension that demonstrates a CNN-style fact-checking ticke
 - ✅ **Icons included:** PNG icons (`icon16/48/128`) are in the repo; regenerate with `icons/generate-icons.sh` if needed.
 - ⚠️ **Demo-only data:** Default provider uses public Wikipedia/Twitter lookups plus keyword heuristics; a fully offline mock provider is available in settings.
 - ⚠️ **Store readiness:** Privacy policy exists as `PRIVACY_POLICY.md` but still needs hosting; broad `<all_urls>` permission and `innerHTML` usage require review before submission.
-- ✅ **Automated QA:** 36 Playwright tests cover overlay basics, fact-checking flows, performance, and anti-fragility scenarios.
+- ✅ **Automated QA:** 103 Playwright tests across 8 specs cover overlay basics, fact-checking flows, enhanced context, extension validation, performance, smoke, and anti-fragility scenarios.
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Chrome](https://img.shields.io/badge/Chrome-Manifest%20V3-green.svg)](manifest.json)
@@ -91,11 +91,12 @@ _Coming soon_ - See [Production Deployment](#production-deployment) for store su
 1. **Visit any webpage** (news sites work best)
 2. **Watch the ticker** appear at the bottom of the page
 3. **See fact-checks scroll** with color-coded verdicts
-4. **Click extension icon** to access settings
+4. **Click extension icon** to access settings and statistics
+5. **Send Wrap-up Email**: From the popup, choose "Send Wrap-up Email" to launch an email draft with a spreadsheet-style summary of the latest fact checks
 
 The ticker will automatically:
-- Extract text from `<p>`, `<h1>`, `<h2>`, `<h3>` elements
-- Identify up to 5 potential factual claims
+- Extract text from all page text nodes (skipping `script`/`style`/`noscript` and its own overlay)
+- Identify up to 10 new potential factual claims per scan, and re-scan when page content changes
 - Match them against keyword patterns
 - Display results in the scrolling ticker
 
@@ -103,21 +104,21 @@ The ticker will automatically:
 
 ### Text Extraction
 ```javascript
-1. Scan page for paragraph and heading elements
+1. Walk all page text nodes (skipping script/style/noscript and the overlay)
 2. Split text into sentences
-3. Filter for declarative statements (>40 chars, >6 words)
-4. Send first 5 claims to background script
+3. Filter for declarative statements (40–1000 chars, ≥6 words, no questions, no first-person narratives)
+4. Send up to 10 new claims per scan to the background script
+5. Re-scan on DOM mutations (500 ms debounce); a bounded 1,000-claim history prevents reprocessing
 ```
 
 ### Mock Fact-Checking
 ```javascript
 1. Normalize claim text to lowercase
 2. Check for keyword patterns:
-   - "covid" → MIXED
-   - "2020 election" → FALSE
-   - "earth is round", "vaccines work" → TRUE
-   - "climate", "warming" → TRUE
-   - "flat earth" → FALSE
+   - TRUE:  "earth is round", "climate change", "vaccines prevent disease", …
+   - FALSE: "earth is flat", "vaccines cause autism", "moon landing was fake", …
+   - MIXED: "coffee is healthy", "organic is better", "detox cleanses", …
+   - Special cases: "climate … hoax" → FALSE; "vaccine … safe" → TRUE
    - Other → UNVERIFIED
 3. Return mock verdict with explanation
 ```
@@ -132,8 +133,14 @@ The ticker will automatically:
 
 ## Project Structure
 
-4. **Configure Settings**: Click the extension icon to access settings and statistics
-5. **Send Wrap-up Email**: From the popup, choose "Send Wrap-up Email" to launch an email draft with a spreadsheet-style summary of the latest fact checks
+- `manifest.json` — Manifest V3 definition (Chrome + Firefox)
+- `content.js` — claim extraction, mutation observer, ticker overlay
+- `background.js` — mock verdicts, Wikipedia/Twitter context lookups, caching
+- `popup.html` / `popup.js` / `popup.css` — settings, statistics, wrap-up email
+- `overlay.css` — ticker styling
+- `disclaimer.html` — install disclaimer
+- `icons/` — SVG source and generated PNG icons
+- `tests/` — Playwright suites and fixtures
 
 ## Development
 
@@ -181,7 +188,7 @@ See [DEBUG.md](DEBUG.md) for comprehensive debugging guide.
 - Replace `innerHTML` usage flagged in `content.js` with safer DOM methods.
 - Keep store description aligned with the "Demo" positioning (see `manifest.json`).
 
-PopFact includes a comprehensive QA test suite built with Playwright (36 tests across overlay basics, mock fact-checking, performance, and anti-fragility).
+PopFact includes a comprehensive QA test suite built with Playwright (103 tests across 8 specs: overlay basics, mock fact-checking, enhanced context, extension behavior, extension validation, performance, smoke, and anti-fragility).
 
 **Quick Start:**
 ```bash
@@ -200,15 +207,19 @@ npm run test:ui
 
 **Test Categories:**
 - **Basic Overlay Tests** - Core functionality (9 tests)
-- **Fact-Checking Tests** - Mocked AI responses (9 tests)
+- **Fact-Checking Tests** - Mocked provider responses (8 tests)
+- **Enhanced Context Tests** - Wikipedia/Twitter lookup behavior (28 tests)
+- **Extension Tests** - Background/content integration (18 tests)
+- **Extension Validation Tests** - Manifest and packaging (15 tests)
 - **Performance Tests** - < 200ms load time (8 tests)
+- **Smoke Tests** - Minimal load checks (6 tests)
 - **Anti-Fragility Tests** - Edge cases and resilience (11 tests)
 
 **Key Features:**
 - 🚫 No live API calls (all responses mocked)
 - ⚡ Performance guardrails (< 200ms overlay load)
 - 🎯 Resilient selectors (works with HTML changes)
-- 📊 36 comprehensive tests
+- 📊 103 comprehensive tests
 
 For detailed testing documentation, see [TESTING.md](TESTING.md) and [tests/README.md](tests/README.md).
 
@@ -225,7 +236,7 @@ For detailed testing documentation, see [TESTING.md](TESTING.md) and [tests/READ
 2. ⚠️ Host privacy policy publicly
 3. ✅ Update descriptions to say "Demo"
 4. ✅ Add disclaimer on install
-5. ✅ Replace innerHTML with safe DOM methods
+5. ⚠️ Replace the remaining `innerHTML` usage in `content.js` with safe DOM methods
 6. ⚠️ Create store screenshots
 7. ⚠️ Test thoroughly
 
@@ -355,4 +366,4 @@ By installing this extension, you acknowledge:
 
 **Made with ❤️ for truth, accuracy, and good UI/UX**
 
-**Status:** Demo/Proof-of-Concept | **Version:** 1.0.0 | **Updated:** 2025-11-23
+**Status:** Demo/Proof-of-Concept | **Version:** 1.0.0 | **Updated:** 2026-10-12
