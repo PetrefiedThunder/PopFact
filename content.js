@@ -23,6 +23,20 @@ const VERDICT_ICONS = {
   ERROR: '⚠'
 };
 
+const DISPLAY_PREFERENCE_DEFAULTS = {
+  enableText: true,
+  tickerSpeed: 'medium'
+};
+
+const TICKER_SPEED_CLASS = {
+  slow: 'speed-slow',
+  medium: 'speed-medium',
+  fast: 'speed-fast'
+};
+
+const TEXT_CHECKING_ON_MESSAGE = 'Scanning page for claims to verify...';
+const TEXT_CHECKING_OFF_MESSAGE = 'Text checking is off';
+
 class PopFactOverlay {
   constructor() {
     this.overlay = null;
@@ -35,7 +49,10 @@ class PopFactOverlay {
     this.observer = null;
     this.extractDebounceTimer = null;
     this.messageListener = null;
+    this.storageListener = null;
     this.initialized = false;
+    this.preferencesApplied = false;
+    this.enableText = false;
 
     this.init();
   }
@@ -43,13 +60,73 @@ class PopFactOverlay {
   init() {
     if (this.initialized || !document.body) return;
 
+    this.initialized = true;
     this.createOverlay();
     this.setupMessageListener();
-    this.detectMediaElements();
-    this.monitorPageContent();
-    this.initialized = true;
+    this.watchDisplayPreferences();
+    this.loadDisplayPreferences();
 
     console.log('PopFact: Overlay initialized');
+  }
+
+  loadDisplayPreferences() {
+    const start = (settings) => {
+      if (this.preferencesApplied) return;
+      this.preferencesApplied = true;
+      this.applyDisplayPreferences(settings);
+      this.detectMediaElements();
+      this.monitorPageContent();
+    };
+
+    if (!chrome.storage?.sync?.get) {
+      start(DISPLAY_PREFERENCE_DEFAULTS);
+      return;
+    }
+
+    chrome.storage.sync.get(DISPLAY_PREFERENCE_DEFAULTS, (settings) => {
+      start(settings || DISPLAY_PREFERENCE_DEFAULTS);
+    });
+  }
+
+  watchDisplayPreferences() {
+    if (this.storageListener || !chrome.storage?.onChanged?.addListener) return;
+
+    this.storageListener = (changes, areaName) => {
+      if (areaName !== 'sync' || !changes || !this.preferencesApplied) return;
+
+      if (changes.enableText) {
+        this.enableText = Boolean(changes.enableText.newValue);
+        this.updateTextCheckingMessage();
+        if (this.enableText) this.scanForClaims();
+      }
+      if (changes.tickerSpeed) {
+        this.applyTickerSpeed(changes.tickerSpeed.newValue);
+      }
+    };
+    chrome.storage.onChanged.addListener(this.storageListener);
+  }
+
+  applyDisplayPreferences(settings) {
+    const stored = settings && typeof settings === 'object' ? settings : DISPLAY_PREFERENCE_DEFAULTS;
+    this.enableText = stored.enableText !== false;
+    this.applyTickerSpeed(stored.tickerSpeed);
+    this.updateTextCheckingMessage();
+  }
+
+  applyTickerSpeed(speed) {
+    this.tickerSpeed = Object.prototype.hasOwnProperty.call(TICKER_SPEED_CLASS, speed) ? speed : 'medium';
+    if (!this.tickerScroll) return;
+
+    for (const className of Object.values(TICKER_SPEED_CLASS)) {
+      this.tickerScroll.classList.remove(className);
+    }
+    this.tickerScroll.classList.add(TICKER_SPEED_CLASS[this.tickerSpeed]);
+  }
+
+  updateTextCheckingMessage() {
+    const loading = this.tickerScroll?.querySelector('.popfact-loading');
+    if (!loading) return;
+    loading.textContent = this.enableText ? TEXT_CHECKING_ON_MESSAGE : TEXT_CHECKING_OFF_MESSAGE;
   }
 
   createOverlay() {
@@ -168,6 +245,8 @@ class PopFactOverlay {
   }
 
   scanForClaims() {
+    if (!this.enableText) return;
+
     const pageClaims = this.extractClaimsFromPage();
     // Keep known claims only while present; removed claims retain the bounded history below.
     this.pageProcessedClaims = new Set(pageClaims.filter((claim) =>
