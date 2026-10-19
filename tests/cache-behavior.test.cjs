@@ -155,17 +155,17 @@ test('changing between configured API keys runs a fresh check', async () => {
   assert.deepEqual(harness.results.map(result => result.message.data.verdict), ['TRUE', 'FALSE']);
 });
 
-test('changing confidence threshold runs a fresh check', async () => {
+test('changing confidence threshold reuses evidence and updates its label', async () => {
   const harness = serviceHarness();
   const { svc } = harness;
   const claim = 'The synthetic threshold fixture records fifteen samples every summer';
   let calls = 0;
   svc.providers.threshold = {
-    async check(_claim, context) {
+    async check() {
       calls += 1;
       return {
         verdict: 'TRUE', explanation: 'synthetic result',
-        confidence: context.confidenceThreshold / 100, sources: []
+        confidence: 0.6, sources: []
       };
     }
   };
@@ -177,8 +177,9 @@ test('changing confidence threshold runs a fresh check', async () => {
   await svc.handleFactCheckRequest(request(claim), 7);
   await drain(harness);
 
-  assert.equal(calls, 2);
-  assert.deepEqual(harness.results.map(result => result.message.data.confidence), [0.5, 0.8]);
+  assert.equal(calls, 1, 'display threshold must not refetch identical evidence');
+  assert.deepEqual(harness.results.map(result => result.message.data.confidence), [0.6, 0.6]);
+  assert.deepEqual(harness.results.map(result => result.message.data.belowThreshold), [false, true]);
 });
 
 test('an in-flight provider switch preserves the producing provider and cache identity', async () => {
