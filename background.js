@@ -200,16 +200,21 @@ class FactCheckService {
         url: request.url
       });
 
-      // Cache result with LRU eviction
-      const cacheKey = this.getCacheKey(request.claim);
-      if (this.cache.size >= CACHE_MAX_SIZE) {
-        // Remove oldest entry (first key in Map)
-        const firstKey = this.cache.keys().next().value;
-        this.cache.delete(firstKey);
-      }
-
       const enrichedResult = this.enrichResult(result, request);
-      this.cache.set(cacheKey, enrichedResult);
+
+      // Never cache ERROR results: transient provider failures must not
+      // block a later fresh attempt after the provider recovers.
+      if (enrichedResult.verdict !== 'ERROR') {
+        // Cache result with LRU eviction
+        const cacheKey = this.getCacheKey(request.claim);
+        if (this.cache.size >= CACHE_MAX_SIZE) {
+          // Remove oldest entry (first key in Map)
+          const firstKey = this.cache.keys().next().value;
+          this.cache.delete(firstKey);
+        }
+
+        this.cache.set(cacheKey, enrichedResult);
+      }
 
       // Persist log and send to tab
       this.recordFactCheck(enrichedResult);
@@ -232,14 +237,16 @@ class FactCheckService {
     }
   }
 
-  // Enrich a provider result with request metadata and the active provider
+  // Enrich a provider result with request metadata and the active provider.
+  // A cached result keeps its original producing provider instead of being
+  // relabeled with whichever provider is active when it is served.
   enrichResult(result, request) {
     return {
       ...result,
       claim: request.claim,
       sourceType: request.source,
       url: request.url,
-      provider: this.settings.apiProvider,
+      provider: result.provider || this.settings.apiProvider,
       timestamp: Date.now()
     };
   }
@@ -293,8 +300,14 @@ class FactCheckService {
   }
 
   getCacheKey(claim) {
-    // Simple hash function for cache key
-    return claim.toLowerCase().trim().replace(/\s+/g, ' ');
+    // Cache identity includes the provider and result-affecting settings so
+    // switching providers (or their inputs) never reuses another's result.
+    // Only the presence of an API key is keyed, never its value.
+    const normalized = claim.toLowerCase().trim().replace(/\s+/g, ' ');
+    const provider = this.settings.apiProvider || DEFAULT_PROVIDER;
+    const threshold = this.settings.confidenceThreshold;
+    const keyFlag = this.settings.apiKey ? 'key' : 'nokey';
+    return `${provider}::${threshold}::${keyFlag}::${normalized}`;
   }
 
   recordFactCheck(result) {
