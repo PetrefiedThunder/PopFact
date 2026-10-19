@@ -70,6 +70,18 @@
   opacity: 0.85;
 }
 
+#popfact-ticker-scroll.speed-slow {
+  animation-duration: 120s;
+}
+
+#popfact-ticker-scroll.speed-medium {
+  animation-duration: 60s;
+}
+
+#popfact-ticker-scroll.speed-fast {
+  animation-duration: 30s;
+}
+
 @keyframes scroll-ticker {
   0% {
     transform: translateX(100%);
