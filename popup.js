@@ -12,12 +12,17 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function validateSettings(settings) {
+  const rawThreshold = settings.confidenceThreshold;
+  const threshold = typeof rawThreshold === 'number' ||
+    (typeof rawThreshold === 'string' && rawThreshold.trim() !== '')
+    ? Number(rawThreshold) : NaN;
   return {
     enableText: Boolean(settings.enableText),
     enableAudio: Boolean(settings.enableAudio),
     enableVideo: Boolean(settings.enableVideo),
     tickerSpeed: VALID_TICKER_SPEEDS.includes(settings.tickerSpeed) ? settings.tickerSpeed : 'medium',
-    confidenceThreshold: Math.max(0, Math.min(100, parseInt(settings.confidenceThreshold) || 50)),
+    confidenceThreshold: Number.isFinite(threshold)
+      ? Math.max(0, Math.min(100, Math.trunc(threshold))) : 50,
     apiProvider: VALID_API_PROVIDERS.includes(settings.apiProvider) ? settings.apiProvider : 'open-knowledge'
   };
 }
@@ -67,11 +72,6 @@ function setupEventListeners() {
   // Confidence threshold slider
   document.getElementById('confidence-threshold').addEventListener('input', (e) => {
     document.getElementById('confidence-value').textContent = e.target.value + '%';
-  });
-
-  // Source credibility slider
-  document.getElementById('min-source-credibility').addEventListener('input', (e) => {
-    document.getElementById('credibility-value').textContent = e.target.value + '%';
   });
 
   // Help link
