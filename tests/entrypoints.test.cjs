@@ -102,9 +102,15 @@ test('worker entrypoint starts one service and handles requests/cache clear afte
 let browser;
 after(async () => { await browser?.close(); });
 
-function installChromeAndClockMocks() {
+function installChromeAndClockMocks(preferences) {
+  const stored = {
+    enableText: true,
+    tickerSpeed: 'medium',
+    ...(preferences && typeof preferences === 'object' ? preferences : {})
+  };
   const state = window.__fixture = {
-    messages: [], listeners: new Set(), observers: new Set(), timers: new Map(), now: 0, nextTimer: 1
+    messages: [], listeners: new Set(), observers: new Set(), timers: new Map(), now: 0, nextTimer: 1,
+    storage: stored, storageListeners: new Set()
   };
   window.chrome = {
     runtime: {
@@ -112,6 +118,14 @@ function installChromeAndClockMocks() {
       onMessage: {
         addListener(listener) { state.listeners.add(listener); },
         removeListener(listener) { state.listeners.delete(listener); }
+      }
+    },
+    storage: {
+      sync: {
+        get(defaults, callback) { callback({ ...defaults, ...stored }); }
+      },
+      onChanged: {
+        addListener(listener) { state.storageListeners.add(listener); }
       }
     }
   };
@@ -141,7 +155,7 @@ function installChromeAndClockMocks() {
   };
 }
 
-async function contentHarness(t, { startup = 'ready', claims = [initialClaim] } = {}) {
+async function contentHarness(t, { startup = 'ready', claims = [initialClaim], preferences = null } = {}) {
   browser ||= await chromium.launch({
     headless: true,
     env: { HOME: process.env.HOME, PATH: process.env.PATH, TMPDIR: process.env.TMPDIR },
@@ -168,7 +182,7 @@ async function contentHarness(t, { startup = 'ready', claims = [initialClaim] } 
       <script type="application/json">${excludedClaim}.</script>
       <style>/* ${excludedClaim}. */</style><noscript>${excludedClaim}.</noscript></body></html>` });
   });
-  await page.addInitScript(installChromeAndClockMocks);
+  await page.addInitScript(installChromeAndClockMocks, preferences);
   await page.goto(fixtureUrl);
   if (startup === 'manual') {
     // Defer the automatic path solely for the supplemental method-idempotency test.
@@ -438,4 +452,50 @@ test('live claim markers follow current page content while historical retention 
     history: __fixture.overlay.processedClaims.size
   })), { live: 0, history: 1000 }, 'removed page claims must not accumulate in live markers');
   assert.deepEqual(errors, []);
+});
+
+test('ticker speed classes keep medium at the existing 60s duration', () => {
+  const css = readFileSync(path.join(sourceRoot, 'overlay.css'), 'utf8');
+  assert.match(css, /#popfact-ticker-scroll\.speed-slow\s*\{[^}]*animation-duration:\s*120s/);
+  assert.match(css, /#popfact-ticker-scroll\.speed-medium\s*\{[^}]*animation-duration:\s*60s/);
+  assert.match(css, /#popfact-ticker-scroll\.speed-fast\s*\{[^}]*animation-duration:\s*30s/);
+});
+
+test('saved text-enable and ticker-speed preferences are applied', async t => {
+  const disabled = await contentHarness(t, { preferences: { enableText: false, tickerSpeed: 'fast' } });
+  assert.deepEqual(disabled.errors, []);
+  assert.deepEqual((await snapshot(disabled.page)).claims, []);
+  assert.equal(await disabled.page.locator('.popfact-loading').textContent(), 'Text checking is off');
+  assert.equal(await disabled.page.locator('#popfact-ticker-scroll.speed-fast').count(), 1);
+  await appendClaim(disabled.page, dynamicClaim);
+  await disabled.page.evaluate(() => __fixture.tick(500));
+  assert.deepEqual((await snapshot(disabled.page)).claims, [], 'disabled text checking must ignore new page text');
+
+  await disabled.page.evaluate(() => {
+    for (const listener of __fixture.storageListeners) {
+      listener({ enableText: { newValue: true } }, 'sync');
+    }
+  });
+  assert.deepEqual((await snapshot(disabled.page)).claims, [initialClaim, dynamicClaim]);
+  assert.equal(await disabled.page.locator('.popfact-loading').textContent(), 'Scanning page for claims to verify...');
+
+  await disabled.page.evaluate(() => {
+    for (const listener of __fixture.storageListeners) {
+      listener({ tickerSpeed: { newValue: 'slow' } }, 'sync');
+    }
+  });
+  assert.equal(await disabled.page.locator('#popfact-ticker-scroll.speed-slow').count(), 1);
+  assert.equal(await disabled.page.locator('#popfact-ticker-scroll.speed-fast').count(), 0);
+  await disabled.page.evaluate(() => {
+    for (const listener of __fixture.storageListeners) {
+      listener({ tickerSpeed: { newValue: 'not-a-speed' } }, 'sync');
+    }
+  });
+  assert.equal(await disabled.page.locator('#popfact-ticker-scroll.speed-medium').count(), 1);
+
+  const defaults = await contentHarness(t);
+  assert.deepEqual((await snapshot(defaults.page)).claims, [initialClaim]);
+  assert.equal(await defaults.page.locator('#popfact-ticker-scroll.speed-medium').count(), 1);
+  assert.equal(await defaults.page.locator('.popfact-loading').textContent(), 'Scanning page for claims to verify...');
+  assert.deepEqual(defaults.errors, []);
 });
