@@ -14,6 +14,7 @@ const DEFAULT_CONFIDENCE_THRESHOLD = 50;
 class FactCheckService {
   constructor() {
     this.cache = new Map();
+    this.apiKeyRevision = 0;
     this.queue = [];
     this.processing = false;
 
@@ -54,7 +55,10 @@ class FactCheckService {
 
     chrome.storage.local.get({ apiKey: '' }, (data) => {
       if (data && typeof data.apiKey === 'string') {
-        this.settings.apiKey = data.apiKey;
+        if (this.settings.apiKey !== data.apiKey) {
+          this.settings.apiKey = data.apiKey;
+          this.apiKeyRevision += 1;
+        }
       }
     });
 
@@ -68,7 +72,11 @@ class FactCheckService {
         }
       }
       if (areaName === 'local' && changes.apiKey) {
-        this.settings.apiKey = changes.apiKey.newValue;
+        const apiKey = typeof changes.apiKey.newValue === 'string' ? changes.apiKey.newValue : '';
+        if (this.settings.apiKey !== apiKey) {
+          this.settings.apiKey = apiKey;
+          this.apiKeyRevision += 1;
+        }
       }
     });
   }
@@ -195,21 +203,26 @@ class FactCheckService {
     const request = this.queue.shift();
 
     try {
+      const cacheKey = this.getCacheKey(request.claim);
       const result = await this.performFactCheck(request.claim, {
         source: request.source,
         url: request.url
       });
 
-      // Cache result with LRU eviction
-      const cacheKey = this.getCacheKey(request.claim);
-      if (this.cache.size >= CACHE_MAX_SIZE) {
-        // Remove oldest entry (first key in Map)
-        const firstKey = this.cache.keys().next().value;
-        this.cache.delete(firstKey);
-      }
-
       const enrichedResult = this.enrichResult(result, request);
-      this.cache.set(cacheKey, enrichedResult);
+
+      // Never cache ERROR results: transient provider failures must not
+      // block a later fresh attempt after the provider recovers.
+      if (enrichedResult.verdict !== 'ERROR') {
+        // Cache result with LRU eviction
+        if (this.cache.size >= CACHE_MAX_SIZE) {
+          // Remove oldest entry (first key in Map)
+          const firstKey = this.cache.keys().next().value;
+          this.cache.delete(firstKey);
+        }
+
+        this.cache.set(cacheKey, enrichedResult);
+      }
 
       // Persist log and send to tab
       this.recordFactCheck(enrichedResult);
@@ -232,21 +245,22 @@ class FactCheckService {
     }
   }
 
-  // Enrich a provider result with request metadata and the active provider
+  // Enrich a provider result with request metadata, preserving its producer.
   enrichResult(result, request) {
     return {
       ...result,
       claim: request.claim,
       sourceType: request.source,
       url: request.url,
-      provider: this.settings.apiProvider,
+      provider: result.provider,
       timestamp: Date.now()
     };
   }
 
   async performFactCheck(claim, context = {}) {
     const providerKey = this.settings.apiProvider || DEFAULT_PROVIDER;
-    const provider = this.providers[providerKey] || this.providers[DEFAULT_PROVIDER];
+    const producingProvider = this.providers[providerKey] ? providerKey : DEFAULT_PROVIDER;
+    const provider = this.providers[producingProvider];
 
     try {
       const result = await provider.check(claim, {
@@ -262,6 +276,7 @@ class FactCheckService {
         explanation: result.explanation,
         confidence: result.confidence,
         sources: result.sources || [],
+        provider: producingProvider,
         timestamp: Date.now()
       };
     } catch (error) {
@@ -272,6 +287,7 @@ class FactCheckService {
         explanation: 'Unable to verify claim at this time',
         confidence: 0,
         sources: [],
+        provider: producingProvider,
         timestamp: Date.now()
       };
     }
@@ -293,8 +309,13 @@ class FactCheckService {
   }
 
   getCacheKey(claim) {
-    // Simple hash function for cache key
-    return claim.toLowerCase().trim().replace(/\s+/g, ' ');
+    // Cache identity includes the provider and result-affecting settings so
+    // switching providers (or their inputs) never reuses another's result.
+    // A revision distinguishes API key changes without storing key material.
+    const normalized = claim.toLowerCase().trim().replace(/\s+/g, ' ');
+    const provider = this.settings.apiProvider || DEFAULT_PROVIDER;
+    const threshold = this.settings.confidenceThreshold;
+    return `${provider}::${threshold}::${this.apiKeyRevision}::${normalized}`;
   }
 
   recordFactCheck(result) {
