@@ -74,10 +74,10 @@ function setupEventListeners() {
     document.getElementById('credibility-value').textContent = e.target.value + '%';
   });
 
-  // Help link
+  // Help link uses the homepage declared in manifest.json.
   document.getElementById('help-link').addEventListener('click', (e) => {
     e.preventDefault();
-    chrome.tabs.create({ url: 'https://github.com/PetrefiedThunder/PopFact' });
+    chrome.tabs.create({ url: chrome.runtime.getManifest().homepage_url });
   });
 }
 
