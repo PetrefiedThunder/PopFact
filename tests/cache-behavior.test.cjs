@@ -15,6 +15,7 @@ const workerSource = readFileSync(path.join(root, 'background.js'), 'utf8');
 function serviceHarness() {
   const timeouts = [];
   const results = [];
+  const storageListeners = [];
   const local = {};
   const context = vm.createContext({
     console: { log() {}, warn() {}, error() {} },
@@ -29,14 +30,14 @@ function serviceHarness() {
           get(defaults, callback) { callback({ ...defaults, ...local }); },
           set(values) { Object.assign(local, values); }
         },
-        onChanged: { addListener() {} }
+        onChanged: { addListener(listener) { storageListeners.push(listener); } }
       },
       tabs: { async sendMessage(tabId, message) { results.push({ tabId, message }); } }
     }
   });
   // Same-script scoping exposes the service classes; grab a dedicated instance.
   vm.runInContext(`${workerSource}\n;globalThis.__svc = new FactCheckService();`, context, { filename: 'background.js' });
-  return { svc: context.__svc, timeouts, results };
+  return { svc: context.__svc, timeouts, results, storageListener: storageListeners.at(-1) };
 }
 
 async function flush() {
@@ -125,4 +126,100 @@ test('transient provider errors are not cached and retry succeeds after recovery
     harness.results.map(result => result.message.data.verdict),
     ['ERROR', 'TRUE']
   );
+});
+
+test('changing between configured API keys runs a fresh check', async () => {
+  const harness = serviceHarness();
+  const { svc } = harness;
+  const claim = 'The synthetic key fixture records twenty samples each spring season';
+  let calls = 0;
+  svc.providers.credentialled = {
+    async check(_claim, context) {
+      calls += 1;
+      return {
+        verdict: context.apiKey === 'fixture-B' ? 'FALSE' : 'TRUE',
+        explanation: 'synthetic result', confidence: 0.9, sources: []
+      };
+    }
+  };
+  svc.settings.apiProvider = 'credentialled';
+
+  harness.storageListener({ apiKey: { newValue: 'fixture-A' } }, 'local');
+  await svc.handleFactCheckRequest(request(claim), 7);
+  await drain(harness);
+  harness.storageListener({ apiKey: { newValue: 'fixture-B' } }, 'local');
+  await svc.handleFactCheckRequest(request(claim), 7);
+  await drain(harness);
+
+  assert.equal(calls, 2, 'a different configured key must run its own check');
+  assert.deepEqual(harness.results.map(result => result.message.data.verdict), ['TRUE', 'FALSE']);
+});
+
+test('changing confidence threshold runs a fresh check', async () => {
+  const harness = serviceHarness();
+  const { svc } = harness;
+  const claim = 'The synthetic threshold fixture records fifteen samples every summer';
+  let calls = 0;
+  svc.providers.threshold = {
+    async check(_claim, context) {
+      calls += 1;
+      return {
+        verdict: 'TRUE', explanation: 'synthetic result',
+        confidence: context.confidenceThreshold / 100, sources: []
+      };
+    }
+  };
+  svc.settings.apiProvider = 'threshold';
+
+  await svc.handleFactCheckRequest(request(claim), 7);
+  await drain(harness);
+  svc.settings.confidenceThreshold = 80;
+  await svc.handleFactCheckRequest(request(claim), 7);
+  await drain(harness);
+
+  assert.equal(calls, 2);
+  assert.deepEqual(harness.results.map(result => result.message.data.confidence), [0.5, 0.8]);
+});
+
+test('an in-flight provider switch preserves the producing provider and cache identity', async () => {
+  const harness = serviceHarness();
+  const { svc } = harness;
+  const claim = 'The synthetic observatory counts twelve satellites each clear night';
+  let finishFirst;
+  svc.providers.first = {
+    check() { return new Promise(resolve => { finishFirst = resolve; }); }
+  };
+  let secondCalls = 0;
+  svc.providers.second = {
+    async check() {
+      secondCalls += 1;
+      return { verdict: 'FALSE', explanation: 'second result', confidence: 0.9, sources: [] };
+    }
+  };
+  svc.settings.apiProvider = 'first';
+
+  await svc.handleFactCheckRequest(request(claim), 7);
+  svc.settings.apiProvider = 'second';
+  finishFirst({ verdict: 'TRUE', explanation: 'first result', confidence: 0.9, sources: [] });
+  await drain(harness);
+  assert.equal(harness.results[0].message.data.provider, 'first');
+
+  await svc.handleFactCheckRequest(request(claim), 7);
+  await drain(harness);
+  assert.equal(secondCalls, 1, 'new provider must not reuse the in-flight old result');
+  assert.equal(harness.results[1].message.data.verdict, 'FALSE');
+  assert.equal(harness.results[1].message.data.provider, 'second');
+});
+
+test('unsupported provider selection labels the provider that actually checked', async () => {
+  const harness = serviceHarness();
+  const { svc } = harness;
+  svc.providers['open-knowledge'].check = async () => ({
+    verdict: 'TRUE', explanation: 'fallback result', confidence: 0.9, sources: []
+  });
+  svc.settings.apiProvider = 'unsupported';
+
+  await svc.handleFactCheckRequest(request('The synthetic fallback provider checks this claim'), 7);
+  await drain(harness);
+  assert.equal(harness.results[0].message.data.provider, 'open-knowledge');
 });
