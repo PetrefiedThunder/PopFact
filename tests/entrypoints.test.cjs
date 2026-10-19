@@ -30,8 +30,14 @@ function workerHarness() {
     setInterval(callback, delay) { intervals.push({ callback, delay }); },
     setTimeout(callback) { timeouts.push(callback); },
     fetch: async url => {
-      // The VM has no real fetch; both provider calls resolve only synthetic data.
+      // The VM has no real fetch; provider calls resolve only synthetic data.
       fetches.push(url);
+      if (url.startsWith('https://factchecktools.googleapis.com/v1alpha1/claims:search?')) {
+        return { ok: true, json: async () => ({ claims: [{
+          text: initialClaim,
+          claimReview: [{ textualRating: 'False', publisher: { name: 'Synthetic' } }]
+        }] }) };
+      }
       assert.match(url, /^https:\/\/(en\.wikipedia\.org\/w\/api\.php|r\.jina\.ai\/https:\/\/twitter\.com\/search)/);
       return {
         ok: true,
@@ -59,6 +65,65 @@ function workerHarness() {
 async function flushPromises() {
   await new Promise(resolve => setImmediate(resolve));
 }
+
+async function factCheckAtThreshold(threshold, provider = 'open-knowledge', apiKey = '') {
+  const worker = workerHarness();
+  worker.storageListeners[0]({
+    confidenceThreshold: { newValue: threshold },
+    apiProvider: { newValue: provider }
+  }, 'sync');
+  if (apiKey) worker.storageListeners[0]({ apiKey: { newValue: apiKey } }, 'local');
+  worker.listeners[0]({
+    type: 'FACT_CHECK_REQUEST', claim: initialClaim, source: 'text',
+    url: 'https://popfact.invalid/fixture', timestamp: Date.now()
+  }, { tab: { id: 7 } }, () => {});
+  await flushPromises();
+  return worker;
+}
+
+test('minimum confidence labels provider results without changing evidence confidence', async () => {
+  const atZero = await factCheckAtThreshold(0);
+  const atHundred = await factCheckAtThreshold(100);
+  const zeroResult = atZero.results[0].message.data;
+  const hundredResult = atHundred.results[0].message.data;
+  assert.equal(zeroResult.confidence, 0.7);
+  assert.equal(hundredResult.confidence, zeroResult.confidence);
+  assert.equal(zeroResult.belowThreshold, false);
+  assert.equal(hundredResult.belowThreshold, true);
+  assert.equal(atHundred.results.length, 1, 'threshold must not suppress the result');
+
+  const mock = await factCheckAtThreshold(100, 'mock');
+  assert.equal(mock.results[0].message.data.confidence, 0.3);
+  assert.equal(mock.results[0].message.data.belowThreshold, true);
+
+  const google = await factCheckAtThreshold(100, 'google', 'fixture');
+  assert.equal(google.results[0].message.data.verdict, 'FALSE');
+  assert.equal(google.results[0].message.data.confidence, 0.75);
+  assert.equal(google.results[0].message.data.belowThreshold, true);
+
+  const googleError = await factCheckAtThreshold(100, 'google');
+  assert.equal(googleError.results[0].message.data.verdict, 'ERROR');
+  assert.equal(googleError.results[0].message.data.belowThreshold, false);
+  assert.equal(googleError.results.length, 1, 'ERROR must remain visible');
+});
+
+test('cached confidence keeps its score and gains the current threshold flag', async () => {
+  const worker = await factCheckAtThreshold(0);
+  const original = worker.results[0].message.data;
+  worker.storageListeners[0]({ confidenceThreshold: { newValue: 100 } }, 'sync');
+  worker.listeners[0]({
+    type: 'FACT_CHECK_REQUEST', claim: initialClaim, source: 'text',
+    url: 'https://popfact.invalid/fixture', timestamp: Date.now()
+  }, { tab: { id: 7 } }, () => {});
+  await flushPromises();
+
+  const cached = worker.results[1].message.data;
+  assert.equal(worker.fetches.length, 2, 'cached request must not refetch evidence');
+  assert.equal(cached.confidence, original.confidence);
+  assert.equal(original.belowThreshold, false);
+  assert.equal(cached.belowThreshold, true);
+  assert.equal(worker.results.length, 2, 'cached below-threshold result must be sent');
+});
 
 test('worker entrypoint starts one service and handles requests/cache clear after fresh starts', async () => {
   for (let restart = 0; restart < 2; restart += 1) {
@@ -304,6 +369,157 @@ async function deliverResult(page, claim = initialClaim) {
     } });
   }, claim);
 }
+
+test('ticker builds a labeled item below threshold without hiding results', () => {
+  class FakeNode {
+    constructor(tagName, text = '') {
+      this.tagName = tagName;
+      this.textContent = text;
+      this.className = '';
+      this.children = [];
+      this.classList = { add: name => { this.className += ` ${name}`; } };
+    }
+
+    appendChild(child) {
+      child.parent = this;
+      this.children.push(child);
+      return child;
+    }
+
+    replaceChildren() { this.children = []; }
+    querySelector(selector) {
+      return this.children.find(child => child.className.split(' ').includes(selector.slice(1))) || null;
+    }
+    remove() { this.parent.children = this.parent.children.filter(child => child !== this); }
+    cloneNode(deep) {
+      const clone = new FakeNode(this.tagName, this.textContent);
+      clone.className = this.className;
+      if (deep) this.children.forEach(child => clone.appendChild(child.cloneNode(true)));
+      return clone;
+    }
+  }
+
+  const document = {
+    readyState: 'loading', addEventListener() {},
+    createElement: tagName => new FakeNode(tagName),
+    createTextNode: text => new FakeNode('#text', text)
+  };
+  const context = vm.createContext({ document });
+  vm.runInContext(`${contentSource}\nglobalThis.Overlay = PopFactOverlay;`, context);
+  const overlay = Object.create(context.Overlay.prototype);
+  overlay.tickerScroll = new FakeNode('div');
+  overlay.factResults = [{
+    claim: initialClaim, verdict: 'UNVERIFIED', explanation: 'Synthetic evidence is uncertain',
+    confidence: 0.7, belowThreshold: false
+  }];
+  overlay.applyConfidenceThreshold(0);
+  assert.equal(overlay.tickerScroll.children.length, 2, 'result and clone remain at threshold 0');
+  assert.doesNotMatch(overlay.tickerScroll.children[0].className, /popfact-below-threshold/);
+  overlay.applyConfidenceThreshold(100);
+
+  assert.equal(overlay.tickerScroll.children.length, 2, 'below-threshold result and clone remain');
+  const item = overlay.tickerScroll.children[0];
+  assert.match(item.className, /popfact-below-threshold/);
+  const findByClass = (node, name) => node.className.split(' ').includes(name)
+    ? node : node.children.map(child => findByClass(child, name)).find(Boolean);
+  const badge = findByClass(item, 'popfact-threshold-badge');
+  assert.equal(badge.className, 'popfact-threshold-badge');
+  assert.equal(badge.textContent, 'Below threshold');
+
+  overlay.applyConfidenceThreshold(0);
+  assert.equal(overlay.tickerScroll.children.length, 2);
+  assert.doesNotMatch(overlay.tickerScroll.children[0].className, /popfact-below-threshold/);
+  overlay.applyConfidenceThreshold(100);
+
+  overlay.factResults.push({
+    claim: dynamicClaim, verdict: 'ERROR', explanation: 'Synthetic provider error',
+    confidence: 0, belowThreshold: false
+  });
+  overlay.updateTicker();
+  assert.equal(overlay.tickerScroll.children.length, 4);
+  assert.match(overlay.tickerScroll.children[2].className, /popfact-error/);
+  assert.doesNotMatch(overlay.tickerScroll.children[2].className, /popfact-below-threshold/);
+  assert.match(readFileSync(path.join(sourceRoot, 'overlay.css'), 'utf8'),
+    /\.popfact-threshold-badge\s*\{[^}]*background:/);
+});
+
+test('a threshold change during settings load overrides an older settings snapshot', () => {
+  let finishSettingsRead;
+  let onStorageChange;
+  const context = vm.createContext({
+    document: { readyState: 'loading', addEventListener() {} },
+    chrome: { storage: {
+      sync: { get(_defaults, callback) { finishSettingsRead = callback; } },
+      onChanged: { addListener(callback) { onStorageChange = callback; } }
+    } }
+  });
+  vm.runInContext(`${contentSource}\nglobalThis.Overlay = PopFactOverlay;`, context);
+  const overlay = Object.create(context.Overlay.prototype);
+  overlay.factResults = [];
+  overlay.preferencesApplied = false;
+  overlay.hasThresholdUpdate = false;
+  overlay.applyTickerSpeed = () => {};
+  overlay.updateTextCheckingMessage = () => {};
+  overlay.detectMediaElements = () => {};
+  overlay.monitorPageContent = () => {};
+  overlay.watchDisplayPreferences();
+  overlay.loadDisplayPreferences();
+
+  onStorageChange({ confidenceThreshold: { newValue: 100 } }, 'sync');
+  finishSettingsRead({ enableText: true, tickerSpeed: 'medium', confidenceThreshold: 0 });
+  assert.equal(overlay.confidenceThreshold, 100);
+  assert.equal(overlay.preferencesApplied, true);
+});
+
+test('below-threshold result keeps the ticker populated and ERROR stays visible', async t => {
+  const { page, errors } = await contentHarness(t, { preferences: { confidenceThreshold: 0 } });
+  await page.addStyleTag({ content: readFileSync(path.join(sourceRoot, 'overlay.css'), 'utf8') });
+  await page.evaluate(claim => {
+    for (const listener of __fixture.listeners) listener({ type: 'FACT_CHECK_RESULT', data: {
+      claim, verdict: 'UNVERIFIED', explanation: 'Synthetic evidence is uncertain',
+      confidence: 0.7, belowThreshold: false
+    } });
+  }, initialClaim);
+
+  assert.equal(await page.locator('.popfact-item').count(), 2, 'result and scroll clone remain visible');
+  assert.equal(await page.locator('.popfact-threshold-badge').count(), 0);
+  await page.evaluate(() => {
+    for (const listener of __fixture.storageListeners) {
+      listener({ confidenceThreshold: { newValue: 100 } }, 'sync');
+    }
+  });
+  assert.equal(await page.locator('.popfact-item.popfact-below-threshold').count(), 2);
+  assert.deepEqual(await page.locator('.popfact-threshold-badge').allTextContents(),
+    ['Below threshold', 'Below threshold']);
+  assert.equal(await page.locator('.popfact-loading').count(), 0);
+  const badgeBackground = await page.locator('.popfact-threshold-badge').first()
+    .evaluate(element => getComputedStyle(element).backgroundColor);
+  assert.notEqual(badgeBackground, 'rgba(0, 0, 0, 0)', 'label needs distinct styling');
+
+  await page.evaluate(() => {
+    for (const listener of __fixture.storageListeners) {
+      listener({ confidenceThreshold: { newValue: 0 } }, 'sync');
+    }
+  });
+  assert.equal(await page.locator('.popfact-item').count(), 2);
+  assert.equal(await page.locator('.popfact-threshold-badge').count(), 0);
+  await page.evaluate(() => {
+    for (const listener of __fixture.storageListeners) {
+      listener({ confidenceThreshold: { newValue: 100 } }, 'sync');
+    }
+  });
+
+  await page.evaluate(claim => {
+    for (const listener of __fixture.listeners) listener({ type: 'FACT_CHECK_RESULT', data: {
+      claim, verdict: 'ERROR', explanation: 'Synthetic provider error',
+      confidence: 0, belowThreshold: false
+    } });
+  }, dynamicClaim);
+  assert.equal(await page.locator('.popfact-item').count(), 4);
+  assert.equal(await page.locator('.popfact-item.popfact-error').count(), 2);
+  assert.equal(await page.locator('.popfact-threshold-badge').count(), 2);
+  assert.deepEqual(errors, []);
+});
 
 test('overlay and toggle mutations do not schedule page scans', async t => {
   const { page, errors } = await contentHarness(t);

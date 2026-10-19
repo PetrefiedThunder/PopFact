@@ -240,6 +240,9 @@ class FactCheckService {
       sourceType: request.source,
       url: request.url,
       provider: this.settings.apiProvider,
+      belowThreshold: result.verdict !== 'ERROR' &&
+        Number.isFinite(result.confidence) &&
+        result.confidence < this.settings.confidenceThreshold / 100,
       timestamp: Date.now()
     };
   }
@@ -251,7 +254,6 @@ class FactCheckService {
     try {
       const result = await provider.check(claim, {
         apiKey: this.settings.apiKey,
-        confidenceThreshold: this.settings.confidenceThreshold,
         source: context.source,
         url: context.url
       });
@@ -424,7 +426,7 @@ class MockProvider {
 }
 
 class OpenKnowledgeProvider {
-  async check(claim, context = {}) {
+  async check(claim) {
     const [wikiResult, twitterResult] = await Promise.all([
       this.queryWikipedia(claim),
       this.queryTwitterContext(claim)
@@ -436,7 +438,7 @@ class OpenKnowledgeProvider {
 
     const verdict = this.deriveVerdict(wikiResult, twitterResult, claim);
     const explanation = this.buildExplanation(wikiResult, twitterResult, verdict, claim);
-    const confidence = this.estimateConfidence(wikiResult, twitterResult, context.confidenceThreshold);
+    const confidence = this.estimateConfidence(wikiResult, twitterResult);
 
     return {
       verdict,
@@ -569,11 +571,11 @@ class OpenKnowledgeProvider {
     return contextualPrefix + parts.join(' • ');
   }
 
-  estimateConfidence(wikiResult, twitterResult, threshold = DEFAULT_CONFIDENCE_THRESHOLD) {
+  estimateConfidence(wikiResult, twitterResult) {
     let base = 0.45;
     if (wikiResult) base += 0.25;
     if (twitterResult?.snippet) base += 0.1;
-    return Math.min(1, Math.max(0, base + threshold / 500));
+    return base;
   }
 }
 

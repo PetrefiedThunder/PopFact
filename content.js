@@ -25,7 +25,8 @@ const VERDICT_ICONS = {
 
 const DISPLAY_PREFERENCE_DEFAULTS = {
   enableText: true,
-  tickerSpeed: 'medium'
+  tickerSpeed: 'medium',
+  confidenceThreshold: 50
 };
 
 const TICKER_SPEED_CLASS = {
@@ -52,7 +53,9 @@ class PopFactOverlay {
     this.storageListener = null;
     this.initialized = false;
     this.preferencesApplied = false;
+    this.hasThresholdUpdate = false;
     this.enableText = false;
+    this.confidenceThreshold = 50;
 
     this.init();
   }
@@ -92,7 +95,13 @@ class PopFactOverlay {
     if (this.storageListener || !chrome.storage?.onChanged?.addListener) return;
 
     this.storageListener = (changes, areaName) => {
-      if (areaName !== 'sync' || !changes || !this.preferencesApplied) return;
+      if (areaName !== 'sync' || !changes) return;
+
+      if (changes.confidenceThreshold) {
+        this.hasThresholdUpdate = true;
+        this.applyConfidenceThreshold(changes.confidenceThreshold.newValue);
+      }
+      if (!this.preferencesApplied) return;
 
       if (changes.enableText) {
         this.enableText = Boolean(changes.enableText.newValue);
@@ -110,7 +119,21 @@ class PopFactOverlay {
     const stored = settings && typeof settings === 'object' ? settings : DISPLAY_PREFERENCE_DEFAULTS;
     this.enableText = stored.enableText !== false;
     this.applyTickerSpeed(stored.tickerSpeed);
+    if (!this.hasThresholdUpdate) this.applyConfidenceThreshold(stored.confidenceThreshold);
     this.updateTextCheckingMessage();
+  }
+
+  applyConfidenceThreshold(threshold) {
+    this.confidenceThreshold = Number.isFinite(threshold) ? threshold : 50;
+    for (const result of this.factResults) {
+      result.belowThreshold = this.isBelowThreshold(result);
+    }
+    if (this.factResults.length) this.updateTicker();
+  }
+
+  isBelowThreshold(result) {
+    return result.verdict !== 'ERROR' && Number.isFinite(result.confidence) &&
+      result.confidence < this.confidenceThreshold / 100;
   }
 
   applyTickerSpeed(speed) {
@@ -364,7 +387,9 @@ class PopFactOverlay {
         if (this.factResults.length >= MAX_FACT_RESULTS) {
           this.factResults.shift();
         }
-        this.factResults.push(message.data);
+        const result = { ...message.data };
+        result.belowThreshold = this.isBelowThreshold(result);
+        this.factResults.push(result);
         this.updateTicker();
       }
     };
@@ -382,12 +407,14 @@ class PopFactOverlay {
   }
 
   buildFactItem(result) {
-    const { claim, verdict, explanation, confidence } = result;
+    const { claim, verdict, explanation, confidence, belowThreshold } = result;
     const verdictClass = VERDICT_CLASSES[verdict] || 'popfact-unverified';
+    const showThresholdLabel = belowThreshold === true && verdict !== 'ERROR';
 
     // Built with safe DOM methods (textContent) to prevent XSS
     const factItem = document.createElement('div');
     factItem.className = `popfact-item ${verdictClass}`;
+    if (showThresholdLabel) factItem.classList.add('popfact-below-threshold');
 
     const icon = document.createElement('span');
     icon.className = 'popfact-item-icon';
@@ -410,6 +437,12 @@ class PopFactOverlay {
     claimSpan.title = claim; // Full claim on hover
 
     claimHeader.appendChild(verdictBadge);
+    if (showThresholdLabel) {
+      const thresholdBadge = document.createElement('span');
+      thresholdBadge.className = 'popfact-threshold-badge';
+      thresholdBadge.textContent = 'Below threshold';
+      claimHeader.appendChild(thresholdBadge);
+    }
     claimHeader.appendChild(document.createTextNode(' '));
     claimHeader.appendChild(claimSpan);
 
