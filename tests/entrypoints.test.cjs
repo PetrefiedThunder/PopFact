@@ -461,6 +461,48 @@ test('ticker speed classes keep medium at the existing 60s duration', () => {
   assert.match(css, /#popfact-ticker-scroll\.speed-fast\s*\{[^}]*animation-duration:\s*30s/);
 });
 
+test('help action opens the homepage declared in the manifest', async t => {
+  assert.equal(manifest.homepage_url, 'https://github.com/PetrefiedThunder/PopFact');
+  assert.doesNotMatch(manifest.homepage_url, /yourusername/i);
+  browser ||= await chromium.launch({
+    headless: true,
+    env: { HOME: process.env.HOME, PATH: process.env.PATH, TMPDIR: process.env.TMPDIR },
+    args: [
+      '--disable-background-networking', '--disable-component-update', '--no-default-browser-check',
+      '--proxy-server=http://127.0.0.1:9', '--proxy-bypass-list=<-loopback>'
+    ],
+    ...(process.env.POPFACT_CHROMIUM_PATH ? { executablePath: process.env.POPFACT_CHROMIUM_PATH } : {})
+  });
+  const context = await browser.newContext({ serviceWorkers: 'block' });
+  t.after(() => context.close());
+  const unexpectedRequests = [];
+  await context.route('**/*', route => {
+    const url = route.request().url();
+    if (url.startsWith('file://')) return route.continue();
+    unexpectedRequests.push(url);
+    return route.abort();
+  });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(homepage => {
+    window.chrome = {
+      runtime: { getManifest: () => ({ homepage_url: homepage }) },
+      storage: {
+        sync: { get(defaults, callback) { callback(defaults); } },
+        local: { get(defaults, callback) { callback(defaults); } }
+      },
+      tabs: { create(options) { window.__helpTabs = (window.__helpTabs || []).concat(options); } }
+    };
+  }, manifest.homepage_url);
+  await page.goto(`file://${path.join(sourceRoot, 'popup.html')}`);
+  await page.locator('#help-link').click();
+  const requested = await page.evaluate(() => window.__helpTabs || []);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(unexpectedRequests, [], 'help must not navigate away from the synthetic popup');
+  assert.deepEqual(requested, [{ url: manifest.homepage_url }]);
+});
+
 test('saved text-enable and ticker-speed preferences are applied', async t => {
   const disabled = await contentHarness(t, { preferences: { enableText: false, tickerSpeed: 'fast' } });
   assert.deepEqual(disabled.errors, []);
