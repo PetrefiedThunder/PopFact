@@ -209,7 +209,6 @@ if [ $ERRORS -eq 0 ] && [ $WARNINGS -eq 0 ]; then
   echo "   4. Select this directory"
   echo ""
   echo "🧪 Test the extension:"
-  echo "   - Open debug-test.html in Chrome"
   echo "   - Visit any news website"
   echo "   - Look for black ticker at bottom"
   exit 0

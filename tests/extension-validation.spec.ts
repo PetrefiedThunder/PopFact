@@ -10,7 +10,6 @@ import fs from 'fs';
  */
 
 const extensionPath = path.resolve(__dirname, '..');
-const testPagePath = `file://${path.resolve(__dirname, '../debug-test.html')}`;
 
 test.describe('PopFact Extension - Core Functionality', () => {
   
@@ -21,7 +20,6 @@ test.describe('PopFact Extension - Core Functionality', () => {
     expect(fs.existsSync(path.join(extensionPath, 'background.js'))).toBeTruthy();
     expect(fs.existsSync(path.join(extensionPath, 'overlay.css'))).toBeTruthy();
     expect(fs.existsSync(path.join(extensionPath, 'popup.html'))).toBeTruthy();
-    expect(fs.existsSync(path.join(extensionPath, 'debug-test.html'))).toBeTruthy();
     
     // Validate manifest
     const manifest = JSON.parse(fs.readFileSync(path.join(extensionPath, 'manifest.json'), 'utf-8'));
@@ -60,19 +58,6 @@ test.describe('PopFact Extension - Core Functionality', () => {
     expect(css).toContain('.popfact-false');
     
     console.log('✓ CSS contains all required selectors and animations');
-  });
-
-  test('Test page has appropriate content', async () => {
-    const html = fs.readFileSync(path.join(extensionPath, 'debug-test.html'), 'utf-8');
-    
-    // Check for test claims
-    expect(html).toContain('earth is round');
-    expect(html).toContain('Climate change');
-    expect(html).toContain('flat earth');
-    expect(html).toContain('COVID-19 vaccines');
-    expect(html).toContain('2020 election');
-    
-    console.log('✓ Test page contains appropriate test claims');
   });
 
   test('Popup HTML is well-formed', async () => {
@@ -212,15 +197,5 @@ test.describe('PopFact Extension - Documentation', () => {
     expect(readme).toContain('chrome://extensions');
     
     console.log('✓ README contains installation instructions');
-  });
-
-  test('Debug test page has instructions', async () => {
-    const html = fs.readFileSync(path.join(extensionPath, 'debug-test.html'), 'utf-8');
-    
-    expect(html).toContain('How to use this page');
-    expect(html).toContain('What Should Happen');
-    expect(html).toContain('Common Issues');
-    
-    console.log('✓ Debug page contains helpful instructions');
   });
 });
