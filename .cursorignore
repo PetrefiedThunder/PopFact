@@ -1,0 +1,42 @@
+# Secrets and credentials
+.env
+.env*
+**/.env*
+*.pem
+*.key
+*.p12
+*.pfx
+*.crx
+credentials*
+**/credentials*
+secrets*
+**/secrets*
+config/secrets.json
+
+# Data dumps
+*.sql
+*.dump
+*.sql.gz
+*.dump.gz
+*dump*.csv
+*export*.csv
+data/
+**/data/
+
+# Build and packaging output
+dist/
+build/
+.next/
+out/
+*.zip
+
+# Test output
+coverage/
+test-results/
+playwright-report/
+
+# Dependencies and environments
+node_modules/
+.venv/
+venv/
+__pycache__/
