@@ -1,254 +1,132 @@
-# Running PopFact Tests
+# Running PopFact tests
 
-## Quick Start
+## Policy
+
+Real data only. A test may read an unedited file from this repository, or use a `chrome.*` shim that holds no dataset. Synthetic, made-up, and edited inputs are not allowed: invented claims or articles, canned fact-check responses, fake API keys, invented provider names, and edited captures. The file list and the per-test behavior are in `tests/README.md`.
+
+## Install
 
 ```bash
-# Install dependencies (first time only)
 npm install
 npx playwright install chromium
+```
 
-# Run smoke tests (validates test infrastructure)
+The help-link test in `tests/entrypoints.test.cjs` launches Playwright's Chromium. The same browser install covers it.
+
+## Commands
+
+`playwright.config.ts` collects `tests/smoke.spec.ts` only, unless `RUN_EXTENSION_TESTS` is set. Node tests are a separate script. `npm test` does not run them.
+
+```bash
+# Smoke only: tests/smoke.spec.ts (2 tests)
 npm test
+npm run test:smoke
 
-# View test report
+# Every *.spec.ts (19 tests)
+npm run test:all
+
+# Node tests (8 tests)
+npm run test:entrypoints
+
+# Smoke file, other Playwright modes. These do not set RUN_EXTENSION_TESTS.
+npm run test:headed
+npm run test:ui
+npm run test:debug
+
+# Open the last Playwright HTML report
 npm run test:report
 ```
 
-## Test Status
-
-### ✅ Smoke Tests (Passing)
-The smoke tests validate that the testing infrastructure is working correctly:
+One Playwright file:
 
 ```bash
-npm test
-# or
-npm run test:smoke
-```
-
-**What's tested:**
-- Playwright can load local HTML files
-- Test fixtures have expected content
-- Can inject scripts into pages
-- Can simulate content script behavior
-- TypeScript compiles without errors
-- Screenshot capabilities work
-
-### ⚠️ Extension Tests (Require Setup)
-The full extension test suite (36 tests) requires the browser extension to be properly loaded. This is a known limitation of testing Chrome extensions with Playwright.
-
-**Current Status:** Extension tests are not run by default because they require:
-1. A persistent browser context (not supported in standard Playwright test runner)
-2. Headed mode (extensions don't work in headless)
-3. Manual extension loading setup
-
-**Test Suites Available (for future use):**
-- `overlay-basic.spec.ts` (9 tests) - Basic overlay functionality
-- `fact-checking.spec.ts` (9 tests) - Fact-checking with mocked responses
-- `performance.spec.ts` (8 tests) - Performance guardrails
-- `anti-fragility.spec.ts` (11 tests) - Edge cases and resilience
-
-To run ALL tests (will fail without extension setup):
-```bash
-npm run test:all
-```
-
-## Why Extension Tests Don't Run Yet
-
-Chrome extensions in Playwright require special setup:
-
-1. **Persistent Context Required**
-   - Extensions need `chromium.launchPersistentContext()` 
-   - Standard `browser.newPage()` doesn't load extensions
-
-2. **Headed Mode Required**
-   - Extensions don't work in headless mode
-   - This makes CI/CD more complex
-
-3. **Extension Loading**
-   - Need to properly configure extension path
-   - Background service workers must initialize
-
-## Solutions for Extension Testing
-
-### Option 1: Manual Testing (Recommended for Now)
-1. Load the extension in Chrome manually
-2. Test the functionality in the browser
-3. Use Developer Tools to validate behavior
-
-### Option 2: Puppeteer (Alternative Framework)
-Puppeteer has better support for extension testing:
-```javascript
-const browser = await puppeteer.launch({
-  headless: false,
-  args: [
-    `--disable-extensions-except=${extensionPath}`,
-    `--load-extension=${extensionPath}`
-  ]
-});
-```
-
-### Option 3: Custom Playwright Fixture (Advanced)
-Create a custom test fixture that uses `launchPersistentContext()`. This requires:
-- Rewriting all tests to use the custom fixture
-- Running in headed mode
-- Managing user data directories
-
-## What's Been Built
-
-Despite the extension loading limitation, the QA infrastructure is complete:
-
-✅ **Test Utilities**
-- `network-mocking.ts` - Mock API responses
-- `shadow-dom.ts` - Resilient DOM selectors
-- `performance.ts` - Performance measurement
-
-✅ **Test Fixtures**
-- `test-page.html` - Sample news article with test data
-
-✅ **Test Suites**
-- 36 comprehensive tests ready to run once extension loads
-- Covers basic functionality, fact-checking, performance, and edge cases
-
-✅ **CI/CD**
-- GitHub Actions workflow configured
-- Smoke tests run automatically
-- Security scanning with CodeQL
-
-✅ **Documentation**
-- Complete testing guides
-- Architecture diagrams
-- Troubleshooting tips
-
-## Current CI Status
-
-The CI pipeline runs smoke tests successfully:
-```yaml
-- name: Run tests
-  run: npm test  # Runs smoke tests only
-```
-
-This ensures:
-- Dependencies are installed correctly
-- TypeScript compiles without errors
-- Test infrastructure is functional
-- No regressions in test tooling
-
-## Future Work
-
-To enable full extension testing:
-
-1. **Create Custom Fixture**
-   - Implement `launchPersistentContext()` wrapper
-   - Handle user data directory management
-   - Configure headed mode
-
-2. **Update CI Pipeline**
-   - Use GitHub Actions with display server (Xvfb)
-   - Configure headed mode in CI
-   - Manage browser user data
-
-3. **Rewrite Test Imports**
-   - Update all tests to use custom fixture
-   - Handle async extension initialization
-   - Wait for service worker to be ready
-
-## Smoke Test Details
-
-The smoke tests validate core functionality without requiring the extension:
-
-### Test 1: Load Local Files
-Verifies Playwright can load the test fixture HTML file.
-
-### Test 2: Fixture Content
-Validates the test page contains expected claims for testing.
-
-### Test 3: Script Injection
-Tests that scripts can be injected into pages (simulating content scripts).
-
-### Test 4: Overlay Simulation
-Simulates the overlay injection to test the concept without the actual extension.
-
-### Test 5: TypeScript Compilation
-Ensures all TypeScript test files compile without errors.
-
-### Test 6: Playwright Features
-Validates screenshot capabilities and basic Playwright functionality.
-
-## Running Individual Test Suites
-
-Even though extension tests won't pass, you can run them to see the structure:
-
-```bash
-# Run specific test file
 npx playwright test tests/smoke.spec.ts
-
-# Run tests in headed mode
-npx playwright test --headed
-
-# Run with UI for debugging
-npx playwright test --ui
-
-# Run specific test by name
-npx playwright test -g "Can load local HTML files"
+RUN_EXTENSION_TESTS=1 npx playwright test tests/extension-validation.spec.ts
+RUN_EXTENSION_TESTS=1 npx playwright test tests/extension.spec.ts
 ```
 
-## Test Output
+Without `RUN_EXTENSION_TESTS`, asking Playwright for `tests/extension.spec.ts` or `tests/extension-validation.spec.ts` matches nothing, because `testMatch` is still `**/smoke.spec.ts`.
 
-Successful smoke test run:
-```
-Running 6 tests using 1 worker
+`npm run test:headed`, `npm run test:ui`, and `npm run test:debug` match the smoke file only. To use those modes on the opt-in specs:
 
-  ✓  Can load local HTML files
-  ✓  Test fixture page has expected content
-  ✓  Can inject custom scripts into page
-  ✓  Can simulate content script injection
-  ✓  TypeScript test files compile without errors
-  ✓  Playwright configuration is valid
-
-  6 passed (1.7s)
+```bash
+RUN_EXTENSION_TESTS=1 npx playwright test --headed
+RUN_EXTENSION_TESTS=1 npx playwright test --ui
+RUN_EXTENSION_TESTS=1 npx playwright test --debug
 ```
 
-## Getting Help
+A name filter still applies on top of `testMatch`:
 
-If you encounter issues:
+```bash
+npx playwright test -g "Playwright configuration is valid"
+```
 
-1. **Check Installation**
-   ```bash
-   npm list @playwright/test
-   npx playwright --version
-   ```
+## What each command runs
 
-2. **Reinstall Dependencies**
-   ```bash
-   rm -rf node_modules package-lock.json
-   npm install
-   npx playwright install chromium
-   ```
+### `npm test` and `npm run test:smoke`
 
-3. **View Test Report**
-   ```bash
-   npm run test:report
-   ```
+`tests/smoke.spec.ts`:
 
-4. **Check Logs**
-   - Test artifacts in `test-results/`
-   - Screenshots in test result folders
-   - HTML report in `playwright-report/`
+- TypeScript test files compile without errors. Body asserts `true` after Playwright loads the file. It does not run `tsc`.
+- Playwright configuration is valid. Sets an inline `<h1>Test</h1>` document, checks the text, and takes a screenshot.
 
-## Summary
+### `npm run test:all`
 
-**Current State:**
-- ✅ Test infrastructure is complete and working
-- ✅ Smoke tests pass (6/6)
-- ✅ CI/CD pipeline is functional
-- ⚠️ Extension tests require additional setup
+Sets `RUN_EXTENSION_TESTS=1`. Runs the smoke file plus:
 
-**Next Steps:**
-- Run smoke tests regularly to validate infrastructure
-- Implement custom fixture for extension loading
-- Update CI to support headed mode testing
+`tests/extension.spec.ts` (4 tests). Three tests read `manifest.json` or `popup.html`. **should load extension without errors** launches Chromium with `headless: false` and `--load-extension` pointed at the repo root. That test needs a display. Its assertion passes when the service-worker list is empty.
 
-For more details, see:
-- `TESTING.md` - Complete testing guide
-- `QA_ARCHITECTURE.md` - Architecture diagrams
-- `QA_SUMMARY.md` - Implementation summary
+`tests/extension-validation.spec.ts` (13 tests). All are disk reads of repo files: manifest, scripts, CSS, popup, three icon files, and `README.md`. One test checks that `background.js` still contains the shipped `MockProvider` strings. It does not mock a response.
+
+`tests/fixtures/extension-fixtures.ts` is not imported by any spec. `npm run test:all` does not load it.
+
+### `npm run test:entrypoints`
+
+The `package.json` script is:
+
+```bash
+node --test --test-concurrency=1 \
+  tests/entrypoints.test.cjs \
+  tests/popup-settings.test.cjs \
+  tests/manifest-icons.test.cjs
+```
+
+- `tests/entrypoints.test.cjs` (3). Settings-load race in `content.js`, `overlay.css` durations (slow `120s`, medium `60s`, fast `30s`), and the popup help control. The help test opens `popup.html` on `file:`, aborts every other request, and expects a tab for `manifest.homepage_url`. It does not contact GitHub. `POPFACT_SOURCE_ROOT` selects the checkout (default: repo root). `POPFACT_CHROMIUM_PATH` selects the browser binary.
+- `tests/popup-settings.test.cjs` (4). Runs `popup.js` in `vm` against `popup.html`. Requires the text `Source selection and credibility filters are unavailable`, and requires that `popup.html` has no `use-multi-source`, `trusted-sources-only`, or `min-source-credibility` id. Also covers thresholds `0` / `50` / `100`, fallback to `50` for missing and invalid stored values, and the save/reopen path for the other exposed settings (including provider `mock`).
+- `tests/manifest-icons.test.cjs` (1). Every path in `manifest.icons` and `action.default_icon` is a PNG whose header width and height equal the manifest key.
+
+## CI
+
+`.github/workflows/qa-tests.yml` runs on push to `main`, `develop`, and `copilot/**`, on pull requests into `main` and `develop`, and on `workflow_dispatch`.
+
+The test job:
+
+- `ubuntu-latest`, Node 20
+- `npm install`
+- `npx playwright install --with-deps chromium`
+- `npm test` with `continue-on-error: true` (smoke file only)
+- uploads `playwright-report/` and `test-results/` (30-day retention)
+
+The workflow does not run `npm run test:entrypoints` or `npm run test:all`.
+
+A second job syntax-checks root `*.js` with `node -c` and root `*.json` with `jq empty`.
+
+## Reports
+
+Playwright writes `playwright-report/` and `test-results/`. `playwright.config.ts` keeps a trace on the first retry, and a screenshot and video on failure. Open the report with `npm run test:report`.
+
+When `CI` is set, retries are 2 and workers are 1. Locally, retries are 0 and workers stay at the Playwright default. `forbidOnly` is on when `CI` is set.
+
+If Chromium fails to start:
+
+```bash
+npm list @playwright/test
+npx playwright --version
+npx playwright install chromium
+```
+
+Two Playwright tests open a browser. **should load extension without errors** in `tests/extension.spec.ts` sets `headless: false` and needs a display. **Playwright configuration is valid** in `tests/smoke.spec.ts` uses the `page` fixture, which launches Chromium headless unless `--headed` is passed. The other 17 Playwright tests do not open a browser: 16 read repository files, and the compile smoke test only asserts `true`. The Node help-link test launches headless Chromium and sends non-file traffic to a closed proxy (`127.0.0.1:9`) before aborting it.
+
+## Coverage this suite leaves out
+
+No test calls a live fact-checking API. No test supplies fact-check page text or a provider payload. The inline `<h1>Test</h1>` document in the smoke test is only a browser probe. Cache identity, content-script scanning, and ticker rendering of fact-check results have no test here. Adding that coverage requires a real, unedited capture, under the policy in `tests/README.md`.

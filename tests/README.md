@@ -1,272 +1,124 @@
-# PopFact QA Testing Suite
+# PopFact test suite
 
-This directory contains the end-to-end testing suite for the PopFact browser extension using Playwright.
+Playwright and Node tests for the PopFact extension. They read this repository's own files and exercise a few settings paths. No test calls a live fact-checking API.
 
-## Overview
+## Real-data-only policy
 
-The PopFact QA suite is designed to ensure the extension is:
-- **Stable**: Works reliably across different web pages
-- **Performant**: Doesn't slow down page load or rendering
-- **Non-breaking**: Doesn't interfere with website functionality
-- **Resilient**: Handles edge cases and HTML structure changes
+This suite is real-data-only. A test may use an unedited file from this repository, or a `chrome.*` environment shim that holds no dataset.
 
-## Test Categories
+Synthetic, made-up, and edited inputs are not allowed:
 
-### 1. Basic Overlay Tests (`overlay-basic.spec.ts`)
-Tests fundamental overlay functionality:
-- Overlay injection and visibility
-- Toggle button functionality
-- Status indicators
-- Z-index positioning
-- Non-interference with page scrolling
+- invented claims, articles, pages, or provider responses
+- edited captures of real pages or real provider responses
+- canned fact-check payloads, fake API keys, or invented provider names
 
-### 2. Fact-Checking Tests (`fact-checking.spec.ts`)
-Tests the fact-checking flow with mocked responses:
-- TRUE verdict display (green ✓)
-- FALSE verdict display (red ✗)
-- MIXED verdict display (yellow !)
-- UNVERIFIED verdict display (gray ?)
-- Multiple concurrent fact checks
-- Claim truncation
-- Loading state management
+This repository has no recorded page capture and no recorded provider response. A test that needs page text or a provider body waits for a real, unedited capture. Authored examples do not fill that gap.
 
-### 3. Performance Tests (`performance.spec.ts`)
-Ensures performance guardrails:
-- **Time to First Paint < 200ms** - Overlay appears quickly
-- Frame rate > 30 FPS for smooth animations
-- Memory footprint < 50MB
-- No blocking of page interactions
-- Efficient handling of dynamic content
-- No layout thrashing
+Shims and probes that remain in the suite:
 
-### 4. Anti-Fragility Tests (`anti-fragility.spec.ts`)
-Tests resilience and robustness:
-- Works with complex nested HTML structures
-- Handles pages with no declarative statements
-- Supports special characters and Unicode
-- Efficient on very long pages
-- Resistant to CSS conflicts
-- Handles rapid DOM changes
-- Works with iframes and shadow DOM
-- Graceful error handling
-- Doesn't interfere with page JavaScript
+- `tests/popup-settings.test.cjs` and the help-link test in `tests/entrypoints.test.cjs` install a `chrome.*` stub so the real `popup.js` or `content.js` can run. The stub is not a dataset.
+- `tests/popup-settings.test.cjs` saves confidence thresholds `0`, `50`, and `100`, and treats stored `null`, `''`, `'invalid'`, and `'12px'` as invalid. Those are the setting's boundaries.
+- The same file sets `api-provider` to `mock`. That value is a provider implemented in `background.js`.
+- `tests/smoke.spec.ts` loads an inline `<h1>Test</h1>` document so Playwright can render and take a screenshot. That document is not a fact-check input.
+- `tests/extension-validation.spec.ts` has a test named "Mock fact-checking logic is implemented". It reads `background.js` and checks that the shipped `MockProvider` source still contains its current strings. It does not send a claim.
 
-## Key Testing Strategies
+## Files
 
-### Shadow DOM Testing
-While our overlay doesn't use Shadow DOM itself, we use resilient selectors:
-```typescript
-// ✅ Good - Stable ID selector
-page.locator('#popfact-overlay')
+| Path | Runner | Role |
+| --- | --- | --- |
+| `tests/smoke.spec.ts` | Playwright | Default suite. Two infrastructure checks. |
+| `tests/extension.spec.ts` | Playwright, opt-in | Manifest, popup file, and one headed extension launch. |
+| `tests/extension-validation.spec.ts` | Playwright, opt-in | Static checks of extension source, CSS, popup, icons, and README. |
+| `tests/entrypoints.test.cjs` | `node --test` | Settings-load race, ticker-speed CSS, help link. |
+| `tests/popup-settings.test.cjs` | `node --test` | Popup settings round-trip against `popup.js` and `popup.html`. |
+| `tests/manifest-icons.test.cjs` | `node --test` | Manifest icon paths exist and match the declared PNG pixel size. |
+| `tests/fixtures/extension-fixtures.ts` | unused | Persistent-context launcher. No spec imports it. The file holds no dataset. |
+| `tests/README.md` | — | This file. |
+| `tests/RUNNING_TESTS.md` | — | Commands and CI. |
 
-// ✅ Good - Semantic class selector
-page.locator('.popfact-item.true')
+There is no `tests/utils/` directory. The only file under `tests/fixtures/` is `extension-fixtures.ts`.
 
-// ❌ Bad - Brittle structure selector
-page.locator('div > div > span')
-```
+## Playwright
 
-### Network Mocking
-We mock API responses to avoid live API calls:
-```typescript
-import { mockFactCheckResponse } from './utils/network-mocking';
+`playwright.config.ts` sets `testDir` to `./tests`. `testMatch` is `**/smoke.spec.ts` unless `RUN_EXTENSION_TESTS` is set, in which case it is `**/*.spec.ts`. Playwright does not collect `*.cjs` files.
 
-await mockFactCheckResponse(page, {
-  claim: 'test claim',
-  verdict: 'FALSE',
-  explanation: 'This is a known hoax',
-  confidence: 0.1,
-});
-```
+`npm test` and `npm run test:smoke` run `tests/smoke.spec.ts` (2 tests):
 
-### Performance Guardrails
-Performance tests fail if thresholds are exceeded:
-```typescript
-// Overlay must appear within 200ms
-const result = await checkOverlayPerformance(page, 200);
-expect(result.passed).toBe(true);
-```
+1. **TypeScript test files compile without errors.** The body is `expect(true).toBe(true)`. The test runs only after Playwright has loaded this file. It does not run `tsc`.
+2. **Playwright configuration is valid.** Sets an inline `<h1>Test</h1>` document, checks the heading text, and takes a screenshot. It does not read `playwright.config.ts`.
 
-## Running Tests
+`npm run test:all` sets `RUN_EXTENSION_TESTS=1` and runs every `*.spec.ts` (19 tests): the smoke file plus the two files below.
 
-### Install Dependencies
-```bash
-npm install
-npx playwright install chromium
-```
+`tests/extension.spec.ts` (4 tests):
 
-### Run All Tests
-```bash
-npm test
-```
+- **should load extension without errors.** Launches Chromium with `headless: false` and `--load-extension` set to the repo root. The assertion is `serviceWorkers.length >= 0` or a background page. A service-worker list of length 0 still passes.
+- **should have correct manifest properties.** Reads `manifest.json` for manifest version 3, a name containing `PopFact`, version `1.0.0`, and the `content.js` / `overlay.css` content script.
+- **should have popup.html file.**
+- **should have valid popup structure.** Reads `popup.html` for `PopFact`, `Settings`, and `popup.js`.
 
-### Run Tests in Headed Mode
-```bash
-npm run test:headed
-```
+`tests/extension-validation.spec.ts` (13 tests). Each test reads files from disk. None of them open a browser.
 
-### Run Tests with UI
-```bash
-npm run test:ui
-```
+- **Extension files exist and are valid.** Requires `manifest.json`, `content.js`, `background.js`, `overlay.css`, and `popup.html`, then checks manifest version, name, and one content script.
+- **Content scripts are syntactically correct.** Requires `PopFactOverlay`, `createOverlay`, and `extractClaimsFromPage` in `content.js`, and `performFactCheck` and `chrome.runtime.onMessage` in `background.js`. It does not parse the files.
+- **CSS contains required styles.** Requires `#popfact-overlay`, `.popfact-brand`, `.popfact-ticker`, `#popfact-ticker-scroll`, `@keyframes scroll-ticker`, `.popfact-true`, `.popfact-false`.
+- **Popup HTML is well-formed.** Requires `PopFact`, `Settings`, `popup.js`, `popup.css`, `<input`, and `checkbox`.
+- **Mock fact-checking logic is implemented.** Requires `background.js` to contain `MockProvider`, `earth is round`, `flat earth`, `election`, `verdict`, and `confidence`.
+- **Extension manifest has all required permissions.** Requires `activeTab`, `storage`, host permission `<all_urls>`, service worker `background.js`, and popup `popup.html`.
+- **Icons exist in correct sizes.** Checks that `icons/icon16.png`, `icons/icon48.png`, and `icons/icon128.png` exist and are larger than 100 bytes. Pixel dimensions are checked by `tests/manifest-icons.test.cjs`, not by this test.
+- **Content script initializes properly.** Requires the `document.readyState === 'loading'` branch, `DOMContentLoaded`, and `new PopFactOverlay`.
+- **Message passing architecture is correct.** Requires `FACT_CHECK_REQUEST` and `chrome.runtime.sendMessage` in `content.js`, `FACT_CHECK_REQUEST` and `chrome.tabs.sendMessage` in `background.js`, and `FACT_CHECK_RESULT` plus `chrome.runtime.onMessage` in `content.js`.
+- **No obvious security vulnerabilities.** Requires that `content.js` and `background.js` do not contain `eval(`, and that `content.js` contains `textContent`.
+- **Proper error handling exists.** Requires `.catch` in `background.js`.
+- **Console logging for debugging.** Requires `console.log` in `content.js` and `background.js`.
+- **README exists and contains key information.** Requires `PopFact`, `Installation`, and `chrome://extensions` in `README.md`.
 
-### Debug Tests
-```bash
-npm run test:debug
-```
+`tests/fixtures/extension-fixtures.ts` exports a Playwright `test` that launches a persistent Chromium context (`headless: false`) with `--load-extension`. The extension path is the parent of that file, which is `tests/`, and the user-data directory is `tests/test-results/user-data`. No spec imports this module.
 
-### View Test Report
-```bash
-npm run test:report
-```
+Other settings in `playwright.config.ts`: Chromium only, `fullyParallel: true`, two retries and one worker when `CI` is set, `forbidOnly` when `CI` is set, HTML and list reporters, trace on first retry, screenshot and video kept on failure.
 
-### Run Specific Test File
-```bash
-npx playwright test tests/performance.spec.ts
-```
+## Node test runner
 
-### Run Tests Matching Pattern
-```bash
-npx playwright test -g "performance"
-```
+`npm run test:entrypoints` runs these files with `node --test --test-concurrency=1` (8 tests):
 
-## Test Utilities
+`tests/entrypoints.test.cjs` (3):
 
-### Network Mocking (`utils/network-mocking.ts`)
-- `mockFactCheckResponse()` - Mock a single response
-- `mockFactCheckResponses()` - Mock multiple responses with pattern matching
-- `mockApiEndpoint()` - Mock external API endpoints
+- **a threshold change during settings load overrides an older settings snapshot.** Runs the repo `content.js` in `vm` with a `chrome.storage` shim. A storage change to `100` during an in-flight read of `0` must win.
+- **ticker speed classes keep medium at the existing 60s duration.** Reads `overlay.css` for `#popfact-ticker-scroll` durations: slow `120s`, medium `60s`, fast `30s`.
+- **help action opens the homepage declared in the manifest.** Opens the repo `popup.html` in headless Chromium, stubs `chrome`, and aborts every request that is not `file:`. Clicking `#help-link` must request a tab for `manifest.homepage_url` (`https://github.com/PetrefiedThunder/PopFact`) and must not navigate the popup.
 
-### Shadow DOM Helpers (`utils/shadow-dom.ts`)
-- `getOverlay()` - Get the overlay element
-- `getFactItems()` - Get all fact check items
-- `waitForFactItem()` - Wait for a fact item to appear
-- `toggleOverlay()` - Toggle overlay visibility
+`POPFACT_SOURCE_ROOT` selects the checkout those three tests read. The default is the repo root. `POPFACT_CHROMIUM_PATH` selects the Chromium binary for the help-link test.
 
-### Performance Utilities (`utils/performance.ts`)
-- `checkOverlayPerformance()` - Measure time to first paint
-- `measureTickerFPS()` - Measure animation frame rate
-- `measureMemoryImpact()` - Check memory usage
+`tests/popup-settings.test.cjs` (4). Runs the repo `popup.js` in `vm` against a small DOM and a `chrome.storage` shim, and reads `popup.html` directly.
 
-## Test Fixtures
+- **unsupported source controls are visibly unavailable.** `popup.html` matches `Source selection and credibility filters are unavailable` and does not contain ids `use-multi-source`, `trusted-sources-only`, or `min-source-credibility`.
+- **confidence thresholds 0, 50, and 100 survive save and reopen.**
+- **missing and invalid confidence thresholds fall back to 50.** Stored values: missing, `null`, `''`, `'invalid'`, `'12px'`.
+- **remaining exposed settings survive save and reopen.** Requires these ids in `popup.html`: `enable-text`, `enable-audio`, `enable-video`, `ticker-speed`, `confidence-threshold`, `api-provider`, `api-key`, `save-settings`. The round-trip sets text and audio off, video on, ticker speed `fast`, and provider `mock`.
 
-### Test Page (`fixtures/test-page.html`)
-A sample news article with various types of claims:
-- TRUE claims: "The sky is blue", "The Earth is round"
-- FALSE claims: "Moon landing was fake", "Vaccines cause autism"
-- MIXED claims: "Coffee is healthy"
-- Dynamic content injection for testing MutationObserver
+`tests/manifest-icons.test.cjs` (1):
 
-## Writing New Tests
+- **every manifest icon path exists at the declared pixel size.** For each entry in `manifest.icons` and `manifest.action.default_icon`, the file exists, starts with a PNG signature, is larger than 100 bytes, and its header width and height equal the manifest key.
 
-### Example: Test a New Feature
-```typescript
-import { test, expect } from '@playwright/test';
-import { getOverlay, waitForOverlay } from './utils/shadow-dom';
-import { mockFactCheckResponse } from './utils/network-mocking';
+## Counts
 
-test('should display custom verdict icon', async ({ page }) => {
-  // Set up mock
-  await mockFactCheckResponse(page, {
-    claim: 'test',
-    verdict: 'TRUE',
-    explanation: 'Verified',
-    confidence: 0.9,
-  });
-  
-  // Navigate to test page
-  await page.goto(`file://${process.cwd()}/tests/fixtures/test-page.html`);
-  
-  // Wait for overlay
-  await waitForOverlay(page);
-  
-  // Assert expected behavior
-  const item = page.locator('.popfact-item.true').first();
-  await expect(item).toBeVisible();
-});
-```
+| Command | Tests |
+| --- | --- |
+| `npm test` or `npm run test:smoke` | 2 |
+| `npm run test:all` | 19 |
+| `npm run test:entrypoints` | 8 |
 
-## CI/CD Integration
+`npm test` does not run the Node files. `npm run test:all` does not run the Node files. The two full commands together are 27 tests.
 
-Tests are designed to run in CI environments:
-- Headless by default
-- Retries enabled on CI
-- Artifacts captured on failure
-- HTML report generation
+## Adding a test
 
-### Example GitHub Actions Workflow
-```yaml
-- name: Install dependencies
-  run: npm ci
+1. Add it to an existing file in the table above, or add a new `*.spec.ts` or `*.cjs` under `tests/`.
+2. Keep the input inside the real-data-only policy.
+3. A new `*.spec.ts` is outside `npm test` until `RUN_EXTENSION_TESTS` is set. A new Node file is outside `npm run test:entrypoints` until the `test:entrypoints` script in `package.json` lists it.
+4. Keep each test able to run on its own.
+5. Update this file and `tests/RUNNING_TESTS.md` when the file list or the commands change.
 
-- name: Install Playwright
-  run: npx playwright install --with-deps chromium
+## CI
 
-- name: Run tests
-  run: npm test
+`.github/workflows/qa-tests.yml` runs `npm test` after `npm install` and `npx playwright install --with-deps chromium`. That is the smoke file only. The step sets `continue-on-error: true`. The workflow does not run `npm run test:entrypoints` or `npm run test:all`.
 
-- name: Upload report
-  if: always()
-  uses: actions/upload-artifact@v3
-  with:
-    name: playwright-report
-    path: playwright-report/
-```
-
-## Best Practices
-
-1. **Use Resilient Selectors**: Prefer IDs and semantic classes over structural selectors
-2. **Mock External Calls**: Always mock API responses to avoid live calls
-3. **Test Performance**: Include timing assertions for critical paths
-4. **Handle Async**: Use proper waits instead of arbitrary timeouts
-5. **Test Edge Cases**: Include tests for error conditions and edge cases
-6. **Keep Tests Isolated**: Each test should be independent
-7. **Document Intent**: Use descriptive test names and comments
-
-## Troubleshooting
-
-### Tests Timeout
-- Increase timeout in test: `test.setTimeout(60000)`
-- Check if overlay is actually loading
-- Verify extension is loaded in browser
-
-### Extension Not Loading
-- Ensure manifest.json is valid
-- Check playwright.config.ts extension path
-- Verify all extension files are present
-
-### Flaky Tests
-- Use proper wait conditions instead of `waitForTimeout()`
-- Check for race conditions
-- Ensure test isolation
-
-### Performance Tests Failing
-- Run in headed mode to see visual issues
-- Check browser console for errors
-- Verify host machine performance
-
-## Future Enhancements
-
-- [ ] Visual regression testing with screenshot comparison
-- [ ] Cross-browser testing (Firefox, Safari)
-- [ ] Accessibility testing (ARIA, keyboard navigation)
-- [ ] Load testing with large pages (>10k elements)
-- [ ] Real browser extension environment testing
-- [ ] Integration with real fact-checking APIs (staging)
-- [ ] Mobile device testing
-
-## Contributing
-
-When adding new tests:
-1. Follow the existing test structure
-2. Add to appropriate test category or create new file
-3. Update this README with new test descriptions
-4. Ensure tests pass locally before committing
-5. Keep tests fast (< 30s per test ideally)
-
-## Support
-
-For issues or questions about the test suite:
-- Check existing test files for examples
-- Review Playwright documentation: https://playwright.dev
-- Open an issue on GitHub
+Commands, headed mode, and report paths are in `tests/RUNNING_TESTS.md`.
