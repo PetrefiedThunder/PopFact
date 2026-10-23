@@ -2,6 +2,9 @@
 .env
 .env*
 **/.env*
+# Keep the committed example template visible; it holds no secrets.
+!.env.example
+!**/.env.example
 *.pem
 *.key
 *.p12
@@ -18,10 +21,14 @@ config/secrets.json
 *.dump
 *.sql.gz
 *.dump.gz
-*dump*.csv
-*export*.csv
 data/
 **/data/
+
+# Backups
+*.bak
+*.bak-*
+*.bak.*
+backups/
 
 # Build and packaging output
 dist/
