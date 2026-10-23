@@ -1,0 +1,49 @@
+# Secrets and credentials
+.env
+.env*
+**/.env*
+# Keep the committed example template visible; it holds no secrets.
+!.env.example
+!**/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crx
+credentials*
+**/credentials*
+secrets*
+**/secrets*
+config/secrets.json
+
+# Data dumps
+*.sql
+*.dump
+*.sql.gz
+*.dump.gz
+data/
+**/data/
+
+# Backups
+*.bak
+*.bak-*
+*.bak.*
+backups/
+
+# Build and packaging output
+dist/
+build/
+.next/
+out/
+*.zip
+
+# Test output
+coverage/
+test-results/
+playwright-report/
+
+# Dependencies and environments
+node_modules/
+.venv/
+venv/
+__pycache__/

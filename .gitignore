@@ -11,8 +11,10 @@ build/
 *.zip
 
 # API keys and secrets
-.env
-.env.local
+# Broad `.env*` so secret rules are enforced by git, not just hidden from
+# Cursor; the tracked example template stays committable.
+.env*
+!.env.example
 config/secrets.json
 
 # OS files
